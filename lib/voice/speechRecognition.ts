@@ -1,5 +1,35 @@
 export type PositionAnchor = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionErrorLike = {
+  error: string;
+  message?: string;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
 export interface IntentResult {
   type: "canvas" | "ai_generate" | "control" | "ambiguous";
   confidence: number;
@@ -280,17 +310,21 @@ export function parseTranscript(text: string): IntentResult {
 
 // Browser SpeechRecognition API Wrapper
 export class VoiceRecognitionManager {
-  private recognition: any = null;
+  private recognition: SpeechRecognitionLike | null = null;
   private isListening = false;
 
   constructor(
     private onResult: (text: string, isFinal: boolean) => void,
-    private onError: (err: any) => void,
+    private onError: (err: SpeechRecognitionErrorLike) => void,
     private onEnd: () => void
   ) {
     if (typeof window !== "undefined") {
+      const speechWindow = window as Window & {
+        SpeechRecognition?: new () => SpeechRecognitionLike;
+        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+      };
       const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
       
       if (SpeechRecognition) {
         this.recognition = new SpeechRecognition();
@@ -298,7 +332,7 @@ export class VoiceRecognitionManager {
         this.recognition.interimResults = true;
         this.recognition.lang = "zh-CN";
 
-        this.recognition.onresult = (event: any) => {
+        this.recognition.onresult = (event: SpeechRecognitionEventLike) => {
           let interimTranscript = "";
           let finalTranscript = "";
 
@@ -317,7 +351,7 @@ export class VoiceRecognitionManager {
           }
         };
 
-        this.recognition.onerror = (event: any) => {
+        this.recognition.onerror = (event: SpeechRecognitionErrorLike) => {
           this.onError(event);
         };
 

@@ -52,8 +52,6 @@ export default function TranscriptBar({
   const highlightedContent = useMemo(() => {
     if (!transcript) return null;
 
-    let words = [transcript];
-
     // Highlight colors
     const colors = Object.keys(COLOR_MAP);
 

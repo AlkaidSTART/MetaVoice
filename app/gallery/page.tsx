@@ -12,10 +12,10 @@ import {
 } from "lucide-react";
 import gsap from "gsap";
 import {
-  getUserArtworks,
-  deleteArtwork,
-  ArtworkRecord,
-} from "@/lib/supabase/db";
+  deleteArtworkViaApi,
+  fetchUserArtworks,
+} from "@/lib/api/artworks";
+import type { ArtworkRecord } from "@/lib/supabase/db";
 import { createClient } from "@/lib/supabase/client";
 
 export default function GalleryPage() {
@@ -23,14 +23,9 @@ export default function GalleryPage() {
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
   const [userName, setUserName] = useState<string>("");
   const [avatarUrl, setAvatarUrl] = useState<string>("");
-  const [userId, setUserId] = useState<string>("");
   const gridRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  async function loadData() {
     const supabase = createClient();
     const {
       data: { user },
@@ -41,15 +36,24 @@ export default function GalleryPage() {
       return;
     }
 
-    setUserId(user.id);
     setUserName(
       user.user_metadata?.name || user.email?.split("@")[0] || "用户",
     );
     setAvatarUrl(user.user_metadata?.avatar_url || "");
 
-    const data = await getUserArtworks(user.id);
-    setArtworks(data);
-  };
+    const data = await fetchUserArtworks();
+    setArtworks(data.artworks);
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const run = async () => {
+        await loadData();
+      };
+      void run();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // GSAP Stagger Entrance
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function GalleryPage() {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("确定要删除这幅画作吗？删除后不可恢复。")) {
-      await deleteArtwork(id, userId);
+      await deleteArtworkViaApi(id);
       // Fade out target element using GSAP
       const card = document.getElementById(`card-${id}`);
       if (card) {
@@ -74,13 +78,13 @@ export default function GalleryPage() {
           opacity: 0,
           duration: 0.3,
           onComplete: async () => {
-            const data = await getUserArtworks(userId);
-            setArtworks(data);
+            const data = await fetchUserArtworks();
+            setArtworks(data.artworks);
           },
         });
       } else {
-        const data = await getUserArtworks(userId);
-        setArtworks(data);
+        const data = await fetchUserArtworks();
+        setArtworks(data.artworks);
       }
     }
   };

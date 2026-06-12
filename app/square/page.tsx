@@ -12,7 +12,8 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import gsap from "gsap";
-import { getPublicArtworks, ArtworkRecord } from "@/lib/supabase/db";
+import { fetchPublicArtworks } from "@/lib/api/artworks";
+import type { ArtworkRecord } from "@/lib/supabase/db";
 
 export default function SquarePage() {
   const router = useRouter();
@@ -20,16 +21,22 @@ export default function SquarePage() {
   const [isLoading, setIsLoading] = useState(true);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadArtworks();
-  }, []);
-
-  const loadArtworks = async () => {
+  async function loadArtworks() {
     setIsLoading(true);
-    const data = await getPublicArtworks();
-    setArtworks(data);
+    const data = await fetchPublicArtworks();
+    setArtworks(data.artworks);
     setIsLoading(false);
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const run = async () => {
+        await loadArtworks();
+      };
+      void run();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // GSAP Stagger Entrance
   useEffect(() => {
@@ -214,11 +221,14 @@ export default function SquarePage() {
                       {art.user_avatar_url ? (
                         <img
                           src={art.user_avatar_url}
-                          alt=""
+                          alt={`${art.user_name || "用户"}头像`}
                           className="w-5 h-5 rounded-full border border-border-custom bg-surface"
                         />
                       ) : (
-                        <div className="w-5 h-5 rounded-full bg-macaron-blue-light border border-border-custom flex items-center justify-center">
+                        <div
+                          className="w-5 h-5 rounded-full bg-macaron-blue-light border border-border-custom flex items-center justify-center"
+                          aria-label="默认用户头像"
+                        >
                           <Users className="w-3 h-3 text-[#2F6196]" />
                         </div>
                       )}

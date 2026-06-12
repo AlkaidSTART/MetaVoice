@@ -89,7 +89,7 @@ export default function IntentModal({
           </h2>
           <div className="bg-surface border border-border-custom/40 rounded-xl p-3 mt-1.5 italic text-sm text-text-secondary flex gap-2 items-start">
             <CornerDownRight className="w-4 h-4 text-text-disabled mt-0.5 flex-shrink-0" />
-            <span>"{transcript}"</span>
+            <span>&quot;{transcript}&quot;</span>
           </div>
         </div>
 
@@ -108,7 +108,7 @@ export default function IntentModal({
               </div>
               <div>
                 <span className="block text-xs font-bold text-text-disabled">
-                  按 "1" 选择
+                  按 &quot;1&quot; 选择
                 </span>
                 <span className="text-sm font-bold text-[#2F6196]">
                   绘制图形
@@ -126,7 +126,7 @@ export default function IntentModal({
               </div>
               <div>
                 <span className="block text-xs font-bold text-text-disabled">
-                  按 "2" 选择
+                  按 &quot;2&quot; 选择
                 </span>
                 <span className="text-sm font-bold text-[#6A4BC9]">
                   AI 生图
@@ -139,7 +139,7 @@ export default function IntentModal({
         {/* Accessibility Helper Label */}
         <div className="text-center bg-surface border border-border-custom/20 rounded-lg py-1.5 px-3">
           <p className="text-xs font-medium text-text-secondary leading-normal">
-            <span className="font-semibold text-text-primary">说"1"或"2"</span>{" "}
+            <span className="font-semibold text-text-primary">说&quot;1&quot;或&quot;2&quot;</span>{" "}
             可以通过语音直接选择，或者点击上方按钮。
           </p>
         </div>

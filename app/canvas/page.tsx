@@ -14,7 +14,6 @@ import {
   Trash2,
   Download,
   Save,
-  Image as ImageIcon,
   Palette,
   HelpCircle,
   FolderHeart,
@@ -23,21 +22,22 @@ import {
   Sparkles,
   Globe,
 } from "lucide-react";
-import { CanvasBoardRef, CanvasShape } from "@/components/canvas/CanvasBoard";
+import { CanvasBoardRef } from "@/components/canvas/CanvasBoard";
 import CanvasBoard from "@/components/canvas/CanvasBoard";
 import MicButton, { MicState } from "@/components/voice/MicButton";
 import TranscriptBar from "@/components/voice/TranscriptBar";
 import IntentModal from "@/components/voice/IntentModal";
 import ToastContainer, { ToastMessage, ToastType } from "@/components/ui/Toast";
 import {
-  parseTranscript,
   VoiceRecognitionManager,
   COLOR_NAME_MAP,
+  type IntentResult,
 } from "@/lib/voice/speechRecognition";
 import {
-  saveArtwork as saveArtworkToDb,
-  getArtwork as getArtworkFromDb,
-} from "@/lib/supabase/db";
+  fetchArtwork,
+  saveArtworkViaApi,
+} from "@/lib/api/artworks";
+import { analyzeIntent, generateImage } from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
 import canvasConfetti from "canvas-confetti";
 
@@ -69,7 +69,7 @@ function CanvasContent() {
 
   // Layout states
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [currentIntent, setCurrentIntent] = useState<any>(null);
+  const [currentIntent, setCurrentIntent] = useState<IntentResult | null>(null);
   const [isIntentModalOpen, setIsIntentModalOpen] = useState<boolean>(false);
   const [canUndo, setCanUndo] = useState<boolean>(false);
   const [canRedo, setCanRedo] = useState<boolean>(false);
@@ -93,6 +93,192 @@ function CanvasContent() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  function translateShapeName(shape: string) {
+    return (
+      {
+        circle: "圆形",
+        rect: "方形",
+        line: "直线",
+        triangle: "三角形",
+        star: "五角星",
+      }[shape] || shape
+    );
+  }
+
+  async function handleSaveArtwork() {
+    if (!canvasRef.current) return;
+    const shapesData = canvasRef.current.getShapesData();
+    if (shapesData.length === 0) {
+      addToast("当前画布为空，没有内容可以保存。", "warning");
+      return;
+    }
+
+    const dataUrl = canvasRef.current.exportImage();
+    const response = await saveArtworkViaApi({
+      id: artworkId,
+      title: artworkTitle,
+      canvasJson: JSON.stringify(shapesData),
+      thumbnailDataUrl: dataUrl,
+      tags: ["Canvas"],
+      isPublic: true,
+    });
+    if (response?.artwork) {
+      setArtworkId(response.artwork.id);
+    }
+
+    canvasConfetti({
+      particleCount: 60,
+      spread: 50,
+      colors: ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0"],
+    });
+
+    addToast(`作品 "${artworkTitle}" 保存成功！已同步到广场`, "success");
+  }
+
+  async function handleExportPNG() {
+    if (!canvasRef.current) return;
+    const dataUrl = canvasRef.current.exportImage();
+    if (!dataUrl) {
+      addToast("导出失败", "error");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `${artworkTitle || "voicecanvas_artwork"}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast("作品已下载到本地！", "success");
+
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const formData = new FormData();
+      formData.append("file", blob, `${artworkTitle || "voicecanvas_artwork"}.png`);
+
+      const response = await fetch("/api/storage/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const body = await response.json();
+
+      if (!response.ok) {
+        throw new Error(body?.error || "Upload failed");
+      }
+
+      addToast("导出图片已自动上传到 voice bucket。", "success");
+    } catch (error) {
+      console.error(error);
+      addToast("本地导出成功，但上传 bucket 失败。", "warning");
+    }
+  }
+
+  function executeIntent(intent: IntentResult) {
+    const { type, canvasOp } = intent;
+
+    if (!canvasOp) {
+      setCurrentIntent(intent);
+      setIsIntentModalOpen(true);
+      setMicState("idle");
+      return;
+    }
+
+    if (type === "control") {
+      const action = canvasOp.action;
+      if (action === "undo") {
+        canvasRef.current?.undo();
+        addToast("已撤销上一步操作", "info");
+      } else if (action === "redo") {
+        canvasRef.current?.redo();
+        addToast("已重做上一步操作", "info");
+      } else if (action === "clear") {
+        canvasRef.current?.clear();
+        addToast("画布已清空", "warning");
+      } else if (action === "save") {
+        handleSaveArtwork();
+      } else if (action === "export") {
+        handleExportPNG();
+      }
+
+      setMicState("success");
+      setTimeout(() => setMicState("idle"), 1000);
+      return;
+    }
+
+    if (type === "canvas") {
+      const { action, shape, color, colorName, position, size, text: textDetail } = canvasOp;
+
+      if (action === "draw" && shape) {
+        canvasRef.current?.addShape(
+          shape,
+          color || "#B5D5F5",
+          position?.anchor || "center",
+          size?.scale || "medium",
+        );
+
+        if (color) {
+          setCurrentColor(color);
+          setCurrentColorName(colorName || COLOR_NAME_MAP[color] || "自定义");
+        }
+        setCanvasMode("canvas");
+        addToast(
+          `成功绘制了一个${colorName || ""}${translateShapeName(shape)}`,
+          "success",
+        );
+      } else if (action === "text" && textDetail) {
+        canvasRef.current?.addShape(
+          "text",
+          color || "#1A1A1A",
+          position?.anchor || "center",
+          "medium",
+          textDetail,
+        );
+        addToast(`成功写入文字: "${textDetail}"`, "success");
+      }
+
+      setMicState("success");
+      setTimeout(() => setMicState("idle"), 1000);
+      return;
+    }
+
+    setCurrentIntent(intent);
+    setIsIntentModalOpen(true);
+    setMicState("idle");
+  }
+
+  function handleVoiceCommandComplete(text: string) {
+    if (!text.trim()) {
+      setIsRecording(false);
+      setMicState("idle");
+      return;
+    }
+
+    setIsRecording(false);
+    setIsProcessing(true);
+    setMicState("processing");
+
+    setTimeout(async () => {
+      try {
+        const intent = await analyzeIntent(text);
+        setIsProcessing(false);
+
+        if (intent.confidence >= 0.8 && intent.type !== "ambiguous") {
+          executeIntent(intent);
+        } else {
+          setCurrentIntent(intent);
+          setMicState("idle");
+          setIsIntentModalOpen(true);
+        }
+      } catch (error) {
+        console.error(error);
+        setIsProcessing(false);
+        setMicState("error");
+        addToast("语音指令解析失败，请再试一次。", "error");
+        setTimeout(() => setMicState("idle"), 1200);
+      }
+    }, 700);
+  }
+
   // 1. Initial configuration: check login and query param
   useEffect(() => {
     const checkAuth = async () => {
@@ -114,7 +300,7 @@ function CanvasContent() {
       });
 
       if (artworkIdQuery) {
-        const art = await getArtworkFromDb(artworkIdQuery);
+        const { artwork: art } = await fetchArtwork(artworkIdQuery);
         if (art) {
           setArtworkId(art.id);
           setArtworkTitle(art.title || "未命名画作");
@@ -134,7 +320,7 @@ function CanvasContent() {
     };
 
     checkAuth();
-  }, [artworkIdQuery]);
+  }, [artworkIdQuery, router]);
 
   // 2. Initialize Voice Recognition Manager
   useEffect(() => {
@@ -170,7 +356,9 @@ function CanvasContent() {
     if (manager.isSupported()) {
       voiceManagerRef.current = manager;
     } else {
-      addToast("您的浏览器不支持原生语音识别，已激活模拟命令输入栏。", "info");
+      setTimeout(() => {
+        addToast("您的浏览器不支持原生语音识别，已激活模拟命令输入栏。", "info");
+      }, 0);
     }
 
     return () => {
@@ -179,107 +367,6 @@ function CanvasContent() {
       }
     };
   }, [micState]);
-
-  // 3. Process the finalized text command
-  const handleVoiceCommandComplete = (text: string) => {
-    if (!text.trim()) {
-      setIsRecording(false);
-      setMicState("idle");
-      return;
-    }
-
-    setIsRecording(false);
-    setIsProcessing(true);
-    setMicState("processing");
-
-    // Simulate analysis delay for premium visual loading feel
-    setTimeout(() => {
-      const intent = parseTranscript(text);
-      setIsProcessing(false);
-
-      if (intent.confidence >= 0.8 && intent.type !== "ambiguous") {
-        executeIntent(intent);
-      } else {
-        // Disambiguate intent through Modal
-        setCurrentIntent(intent);
-        setMicState("idle");
-        setIsIntentModalOpen(true);
-      }
-    }, 700);
-  };
-
-  // 4. Execute parsed intent
-  const executeIntent = (intent: any) => {
-    const { type, canvasOp, imagePrompt } = intent;
-
-    if (type === "control") {
-      const action = canvasOp.action;
-      if (action === "undo") {
-        canvasRef.current?.undo();
-        addToast("已撤销上一步操作", "info");
-      } else if (action === "redo") {
-        canvasRef.current?.redo();
-        addToast("已重做上一步操作", "info");
-      } else if (action === "clear") {
-        canvasRef.current?.clear();
-        addToast("画布已清空", "warning");
-      } else if (action === "save") {
-        handleSaveArtwork();
-      } else if (action === "export") {
-        handleExportPNG();
-      }
-
-      setMicState("success");
-      setTimeout(() => setMicState("idle"), 1000);
-    } else if (type === "canvas") {
-      const {
-        action,
-        shape,
-        color,
-        colorName,
-        position,
-        size,
-        text: textDetail,
-      } = canvasOp;
-
-      if (action === "draw" && shape) {
-        canvasRef.current?.addShape(
-          shape,
-          color,
-          position?.anchor || "center",
-          size?.scale || "medium",
-        );
-
-        // Update color indicator
-        if (color) {
-          setCurrentColor(color);
-          setCurrentColorName(colorName || COLOR_NAME_MAP[color] || "自定义");
-        }
-        setCanvasMode("canvas");
-        addToast(
-          `成功绘制了一个${colorName || ""}${translateShapeName(shape)}`,
-          "success",
-        );
-      } else if (action === "text" && textDetail) {
-        canvasRef.current?.addShape(
-          "text",
-          color || "#1A1A1A",
-          position?.anchor || "center",
-          "medium",
-          textDetail,
-        );
-        addToast(`成功写入文字: "${textDetail}"`, "success");
-      }
-
-      setMicState("success");
-      setTimeout(() => setMicState("idle"), 1000);
-    } else if (type === "ai_generate" || type === "ambiguous") {
-      // Direct pass into modal decision block if unresolved
-      setCurrentIntent(intent);
-      setIsIntentModalOpen(true);
-      setMicState("idle");
-    }
-  };
 
   // 5. Intent Modal callback
   const handleIntentResolution = (option: "canvas" | "ai_generate") => {
@@ -303,7 +390,6 @@ function CanvasContent() {
       setMicState("success");
       setTimeout(() => setMicState("idle"), 1000);
     } else if (option === "ai_generate") {
-      // Simulate Qwen AI Image generation
       addToast("AI 生图排队中，正在合成场景图像...", "info");
       setMicState("processing");
       setIsProcessing(true);
@@ -313,91 +399,39 @@ function CanvasContent() {
         currentIntent.transcript ||
         "beautiful pastel art";
 
-      // Load curated beautiful illustrations or fallback based on keyword
-      setTimeout(() => {
-        // Query parameters for a generic high-quality illustration
-        const encodedKeyword = encodeURIComponent(promptKeyword);
-        const randomSig = Math.floor(Math.random() * 1000);
+      generateImage(promptKeyword)
+        .then(async (result) => {
+          const finalImageUrl = result.storageUrl || result.imageUrl;
 
-        // Use loremflickr for redirectable keyword images
-        const imageUrl = `https://loremflickr.com/600/500/${encodedKeyword}?sig=${randomSig}`;
+          canvasRef.current?.addShape(
+            "image",
+            "#ffffff",
+            "center",
+            "large",
+            finalImageUrl,
+          );
 
-        canvasRef.current?.addShape(
-          "image",
-          "#ffffff",
-          "center",
-          "large",
-          imageUrl,
-        );
+          setIsProcessing(false);
+          setMicState("success");
+          setCanvasMode("ai_generate");
 
-        setIsProcessing(false);
-        setMicState("success");
-        setCanvasMode("ai_generate");
+          canvasConfetti({
+            particleCount: 80,
+            spread: 60,
+            origin: { y: 0.7 },
+          });
 
-        // Confetti explosion for premium AI feedback
-        canvasConfetti({
-          particleCount: 80,
-          spread: 60,
-          origin: { y: 0.7 },
+          addToast("AI 场景生成并载入画布成功！", "success");
+          setTimeout(() => setMicState("idle"), 1200);
+        })
+        .catch((error) => {
+          console.error(error);
+          setIsProcessing(false);
+          setMicState("error");
+          addToast("AI 生图失败，请重试。", "error");
+          setTimeout(() => setMicState("idle"), 1200);
         });
-
-        addToast("AI 场景生成并载入画布成功！", "success");
-
-        setTimeout(() => setMicState("idle"), 1200);
-      }, 3500); // 3.5s simulated generation time
     }
-  };
-
-  // 6. Manual Actions
-  const handleSaveArtwork = async () => {
-    if (!canvasRef.current) return;
-    const shapesData = canvasRef.current.getShapesData();
-    if (shapesData.length === 0) {
-      addToast("当前画布为空，没有内容可以保存。", "warning");
-      return;
-    }
-
-    const dataUrl = canvasRef.current.exportImage();
-    const userId = user?.id || "";
-
-    // Save to database (thumbnail uploaded to Supabase Storage "voice" bucket)
-    const result = await saveArtworkToDb(
-      artworkId,
-      userId,
-      artworkTitle,
-      JSON.stringify(shapesData),
-      dataUrl,
-      ["Canvas"],
-      true,
-    );
-    if (result) {
-      setArtworkId(result.id);
-    }
-
-    // Confetti!
-    canvasConfetti({
-      particleCount: 60,
-      spread: 50,
-      colors: ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0"],
-    });
-
-    addToast(`作品 "${artworkTitle}" 保存成功！已同步到广场`, "success");
-  };
-
-  const handleExportPNG = () => {
-    if (!canvasRef.current) return;
-    const dataUrl = canvasRef.current.exportImage();
-    if (!dataUrl) {
-      addToast("导出失败", "error");
-      return;
-    }
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `${artworkTitle || "voicecanvas_artwork"}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    addToast("作品已下载到本地！", "success");
   };
 
   // Trigger recording
@@ -428,19 +462,6 @@ function CanvasContent() {
         }
       }
     }
-  };
-
-  // Translate helpers
-  const translateShapeName = (shape: string) => {
-    return (
-      {
-        circle: "圆形",
-        rect: "方形",
-        line: "直线",
-        triangle: "三角形",
-        star: "五角星",
-      }[shape] || shape
-    );
   };
 
   const handleLogout = async () => {

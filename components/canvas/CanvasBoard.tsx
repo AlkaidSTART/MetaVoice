@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import gsap from "gsap";
 
 export interface CanvasShape {
@@ -17,7 +23,13 @@ export interface CanvasShape {
 }
 
 export interface CanvasBoardRef {
-  addShape: (shapeType: CanvasShape["type"], color: string, positionName: string, sizeScale: "small" | "medium" | "large", detail?: string) => void;
+  addShape: (
+    shapeType: CanvasShape["type"],
+    color: string,
+    positionName: string,
+    sizeScale: "small" | "medium" | "large",
+    detail?: string,
+  ) => void;
   undo: () => void;
   redo: () => void;
   clear: () => void;
@@ -39,7 +51,10 @@ const SIZE_MAP = {
   large: 220,
 };
 
-const ANCHOR_MAP: Record<string, (w: number, h: number) => { x: number; y: number }> = {
+const ANCHOR_MAP: Record<
+  string,
+  (w: number, h: number) => { x: number; y: number }
+> = {
   center: (w, h) => ({ x: w / 2, y: h / 2 }),
   left: (w, h) => ({ x: w * 0.25, y: h / 2 }),
   right: (w, h) => ({ x: w * 0.75, y: h / 2 }),
@@ -55,17 +70,19 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
   ({ onHistoryChange, onSaveState, initialShapes = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    
+
     const [shapes, setShapes] = useState<CanvasShape[]>(initialShapes);
     const [history, setHistory] = useState<CanvasShape[][]>([initialShapes]);
     const [historyIndex, setHistoryIndex] = useState<number>(0);
     const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
-    const [loadedImages, setLoadedImages] = useState<Record<string, HTMLImageElement>>({});
+    const [loadedImages, setLoadedImages] = useState<
+      Record<string, HTMLImageElement>
+    >({});
 
     // 1. Sync dimensions with container size
     useEffect(() => {
       if (typeof window === "undefined" || !containerRef.current) return;
-      
+
       const updateSize = () => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
@@ -84,7 +101,11 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
     // 2. Load images for canvas rendering
     useEffect(() => {
       shapes.forEach((shape) => {
-        if (shape.type === "image" && shape.imageUrl && !loadedImages[shape.imageUrl]) {
+        if (
+          shape.type === "image" &&
+          shape.imageUrl &&
+          !loadedImages[shape.imageUrl]
+        ) {
           const img = new Image();
           img.crossOrigin = "anonymous";
           img.src = shape.imageUrl;
@@ -113,7 +134,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
       ctx.strokeStyle = "#E8E8E4";
       ctx.lineWidth = 0.5;
       const gridSize = 25;
-      
+
       // Vertical grids
       for (let x = 0; x < dimensions.width; x += gridSize) {
         ctx.beginPath();
@@ -150,7 +171,13 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
             // Draw image scaled
             const drawW = Math.min(dimensions.width * 0.8, size * 2.5);
             const drawH = drawW * (img.height / img.width);
-            ctx.drawImage(img, shape.x - drawW / 2, shape.y - drawH / 2, drawW, drawH);
+            ctx.drawImage(
+              img,
+              shape.x - drawW / 2,
+              shape.y - drawH / 2,
+              drawW,
+              drawH,
+            );
           } else {
             // Loading placeholder while image downloads
             ctx.fillStyle = "#E8E8E4";
@@ -160,22 +187,18 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
             ctx.textAlign = "center";
             ctx.fillText("正在加载 AI 图像...", shape.x, shape.y);
           }
-        } 
-        else if (shape.type === "circle") {
+        } else if (shape.type === "circle") {
           ctx.beginPath();
           ctx.arc(shape.x, shape.y, size / 2, 0, Math.PI * 2);
           ctx.fill();
-        } 
-        else if (shape.type === "rect") {
+        } else if (shape.type === "rect") {
           ctx.fillRect(shape.x - size / 2, shape.y - size / 2, size, size);
-        } 
-        else if (shape.type === "line") {
+        } else if (shape.type === "line") {
           ctx.beginPath();
           ctx.moveTo(shape.x - size / 2, shape.y);
           ctx.lineTo(shape.x + size / 2, shape.y);
           ctx.stroke();
-        } 
-        else if (shape.type === "triangle") {
+        } else if (shape.type === "triangle") {
           ctx.beginPath();
           const r = size / 2;
           ctx.moveTo(shape.x, shape.y - r); // Top
@@ -183,13 +206,12 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
           ctx.lineTo(shape.x + r * Math.sin(Math.PI / 3), shape.y + r / 2); // Bottom Right
           ctx.closePath();
           ctx.fill();
-        } 
-        else if (shape.type === "star") {
+        } else if (shape.type === "star") {
           ctx.beginPath();
           const numPoints = 5;
           const outerR = size / 2;
           const innerR = outerR * 0.4;
-          let angle = Math.PI / 2 * 3;
+          let angle = (Math.PI / 2) * 3;
           const step = Math.PI / numPoints;
 
           ctx.moveTo(shape.x, shape.y - outerR);
@@ -203,8 +225,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
           }
           ctx.closePath();
           ctx.fill();
-        } 
-        else if (shape.type === "text" && shape.text) {
+        } else if (shape.type === "text" && shape.text) {
           ctx.font = `bold ${Math.max(16, size * 0.35)}px Inter, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -219,7 +240,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
     const pushHistory = (newShapes: CanvasShape[]) => {
       const newHistory = history.slice(0, historyIndex + 1);
       newHistory.push(newShapes);
-      
+
       setHistory(newHistory);
       setHistoryIndex(newHistory.length - 1);
       setShapes(newShapes);
@@ -268,15 +289,21 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
           onUpdate: () => {
             setShapes((currentShapes) =>
               currentShapes.map((s) =>
-                s.id === shapeId ? { ...s, renderScale: animState.scale, opacity: animState.opacity } : s
-              )
+                s.id === shapeId
+                  ? {
+                      ...s,
+                      renderScale: animState.scale,
+                      opacity: animState.opacity,
+                    }
+                  : s,
+              ),
             );
           },
           onComplete: () => {
             // Freeze final values and push to history
             setShapes((currentShapes) => {
               const finalized = currentShapes.map((s) =>
-                s.id === shapeId ? { ...s, renderScale: 1, opacity: 1 } : s
+                s.id === shapeId ? { ...s, renderScale: 1, opacity: 1 } : s,
               );
               pushHistory(finalized);
               return finalized;
@@ -345,8 +372,8 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
     }));
 
     return (
-      <div 
-        ref={containerRef} 
+      <div
+        ref={containerRef}
         className="w-full h-full relative border border-border-custom rounded-2xl bg-white shadow-inner overflow-hidden"
       >
         <canvas
@@ -359,7 +386,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
         />
       </div>
     );
-  }
+  },
 );
 
 CanvasBoard.displayName = "CanvasBoard";

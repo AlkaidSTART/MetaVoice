@@ -249,7 +249,10 @@ export default function LoginPage() {
 
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-xs font-bold text-text-secondary">
+              <label
+                htmlFor="email"
+                className="text-xs font-bold text-text-secondary"
+              >
                 邮箱地址
               </label>
               <div className="relative">
@@ -267,7 +270,10 @@ export default function LoginPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="password" className="text-xs font-bold text-text-secondary">
+              <label
+                htmlFor="password"
+                className="text-xs font-bold text-text-secondary"
+              >
                 密码
               </label>
               <div className="relative">
@@ -287,7 +293,11 @@ export default function LoginPage() {
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-secondary transition-colors cursor-pointer"
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -309,7 +319,9 @@ export default function LoginPage() {
               ) : (
                 <LogIn className="w-4 h-4" />
               )}
-              <span>{isLoading ? "处理中..." : isSignUp ? "注册并登录" : "登录"}</span>
+              <span>
+                {isLoading ? "处理中..." : isSignUp ? "注册并登录" : "登录"}
+              </span>
             </button>
           </form>
 
@@ -329,9 +341,15 @@ export default function LoginPage() {
           <div className="text-center">
             <p className="text-[10px] text-text-disabled leading-relaxed">
               继续即表示同意我们的
-              <span className="font-semibold text-text-secondary hover:text-sakura cursor-pointer"> 服务条款 </span>
+              <span className="font-semibold text-text-secondary hover:text-sakura cursor-pointer">
+                {" "}
+                服务条款{" "}
+              </span>
               和
-              <span className="font-semibold text-text-secondary hover:text-sakura cursor-pointer"> 隐私政策</span>
+              <span className="font-semibold text-text-secondary hover:text-sakura cursor-pointer">
+                {" "}
+                隐私政策
+              </span>
             </p>
           </div>
         </div>

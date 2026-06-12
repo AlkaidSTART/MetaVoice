@@ -11,7 +11,12 @@ interface IntentModalProps {
   onClose: () => void;
 }
 
-export default function IntentModal({ isOpen, transcript, onSelect, onClose }: IntentModalProps) {
+export default function IntentModal({
+  isOpen,
+  transcript,
+  onSelect,
+  onClose,
+}: IntentModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -20,13 +25,15 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
       document.body.style.overflow = "hidden";
 
       // GSAP entrance transition: pop overlay and elastic scale container
-      gsap.fromTo(overlayRef.current, 
-        { opacity: 0 }, 
-        { opacity: 1, duration: 0.25, ease: "power2.out" }
+      gsap.fromTo(
+        overlayRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.25, ease: "power2.out" },
       );
-      gsap.fromTo(modalRef.current, 
+      gsap.fromTo(
+        modalRef.current,
         { scale: 0.85, y: 30, opacity: 0 },
-        { scale: 1, y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.8)" }
+        { scale: 1, y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.8)" },
       );
     } else {
       document.body.style.overflow = "unset";
@@ -74,7 +81,10 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
           <span className="text-xs font-semibold text-sakura tracking-wider uppercase">
             确认你的意图
           </span>
-          <h2 id="intent-modal-title" className="text-lg font-bold text-text-primary">
+          <h2
+            id="intent-modal-title"
+            className="text-lg font-bold text-text-primary"
+          >
             我听到了...
           </h2>
           <div className="bg-surface border border-border-custom/40 rounded-xl p-3 mt-1.5 italic text-sm text-text-secondary flex gap-2 items-start">
@@ -86,7 +96,7 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
         {/* Options */}
         <div className="flex flex-col gap-3">
           <p className="text-xs font-bold text-text-secondary">你想要：</p>
-          
+
           <div className="grid grid-cols-2 gap-3">
             {/* Option 1: Canvas Drawing */}
             <button
@@ -97,8 +107,12 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
                 <Palette className="w-5 h-5" />
               </div>
               <div>
-                <span className="block text-xs font-bold text-text-disabled">按 "1" 选择</span>
-                <span className="text-sm font-bold text-[#2F6196]">绘制图形</span>
+                <span className="block text-xs font-bold text-text-disabled">
+                  按 "1" 选择
+                </span>
+                <span className="text-sm font-bold text-[#2F6196]">
+                  绘制图形
+                </span>
               </div>
             </button>
 
@@ -111,8 +125,12 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <span className="block text-xs font-bold text-text-disabled">按 "2" 选择</span>
-                <span className="text-sm font-bold text-[#6A4BC9]">AI 生图</span>
+                <span className="block text-xs font-bold text-text-disabled">
+                  按 "2" 选择
+                </span>
+                <span className="text-sm font-bold text-[#6A4BC9]">
+                  AI 生图
+                </span>
               </div>
             </button>
           </div>
@@ -121,7 +139,8 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
         {/* Accessibility Helper Label */}
         <div className="text-center bg-surface border border-border-custom/20 rounded-lg py-1.5 px-3">
           <p className="text-xs font-medium text-text-secondary leading-normal">
-            <span className="font-semibold text-text-primary">说"1"或"2"</span> 可以通过语音直接选择，或者点击上方按钮。
+            <span className="font-semibold text-text-primary">说"1"或"2"</span>{" "}
+            可以通过语音直接选择，或者点击上方按钮。
           </p>
         </div>
 

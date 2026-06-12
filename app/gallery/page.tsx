@@ -2,9 +2,22 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Palette, Download, Trash2, ArrowLeft, Image as ImageIcon, Sparkles } from "lucide-react";
+import {
+  Palette,
+  Download,
+  Trash2,
+  ArrowLeft,
+  Image as ImageIcon,
+  Sparkles,
+} from "lucide-react";
 import gsap from "gsap";
-import { getArtworks, deleteArtwork, getCurrentUser, ArtworkData, UserProfile } from "@/lib/db/mockDb";
+import {
+  getArtworks,
+  deleteArtwork,
+  getCurrentUser,
+  ArtworkData,
+  UserProfile,
+} from "@/lib/db/mockDb";
 
 export default function GalleryPage() {
   const router = useRouter();
@@ -24,7 +37,7 @@ export default function GalleryPage() {
       gsap.fromTo(
         gridRef.current.children,
         { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: "power2.out" }
+        { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: "power2.out" },
       );
     }
   }, [artworks]);
@@ -102,7 +115,10 @@ export default function GalleryPage() {
                 {user.name}
               </span>
               <img
-                src={user.avatarUrl || "https://api.dicebear.com/7.x/adventurer/svg"}
+                src={
+                  user.avatarUrl ||
+                  "https://api.dicebear.com/7.x/adventurer/svg"
+                }
                 alt="Avatar"
                 className="w-8 h-8 rounded-full border border-sakura bg-sakura-light"
               />
@@ -136,10 +152,14 @@ export default function GalleryPage() {
             <div className="w-16 h-16 rounded-2xl bg-sakura-light flex items-center justify-center text-[#B3455C] mb-4">
               <ImageIcon className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-bold text-text-primary">画廊空空如也</h3>
+            <h3 className="text-base font-bold text-text-primary">
+              画廊空空如也
+            </h3>
             <p className="text-xs text-text-secondary mt-1.5 max-w-sm">
               你还没有保存过画作。进入画板，按住麦克风，说出：
-              <span className="block font-semibold text-sakura mt-1 italic">“画一个蓝色的圆形在中间”</span>
+              <span className="block font-semibold text-sakura mt-1 italic">
+                “画一个蓝色的圆形在中间”
+              </span>
               然后说“保存”，你的作品就会出现在这里！
             </p>
             <button
@@ -165,7 +185,9 @@ export default function GalleryPage() {
                 className="group flex flex-col bg-white border border-border-custom rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden relative"
                 role="gridcell"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && handleOpenArtwork(art.id)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && handleOpenArtwork(art.id)
+                }
               >
                 {/* Image Preview */}
                 <div className="aspect-[4/3] w-full bg-[#FAFAF8] relative overflow-hidden border-b border-border-custom/50">
@@ -174,7 +196,7 @@ export default function GalleryPage() {
                     alt={art.title || "未命名作品"}
                     className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                   />
-                  
+
                   {/* Floating Action Bar (Pill overlay) */}
                   <div className="absolute bottom-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <button

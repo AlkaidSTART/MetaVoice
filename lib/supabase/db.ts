@@ -42,7 +42,9 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
   }
 
   return (data || []).map((item: Record<string, unknown>) => {
-    const profiles = item.profiles as { name?: string; avatar_url?: string } | undefined;
+    const profiles = item.profiles as
+      | { name?: string; avatar_url?: string }
+      | undefined;
     return {
       id: item.id as string,
       user_id: item.user_id as string,

@@ -2,7 +2,15 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Globe, Download, Sparkles, Image, Users, Clock, ChevronLeft } from "lucide-react";
+import {
+  Globe,
+  Download,
+  Sparkles,
+  Image,
+  Users,
+  Clock,
+  ChevronLeft,
+} from "lucide-react";
 import gsap from "gsap";
 import { getPublicArtworks, ArtworkRecord } from "@/lib/supabase/db";
 
@@ -29,7 +37,7 @@ export default function SquarePage() {
       gsap.fromTo(
         gridRef.current.children,
         { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 0.5, stagger: 0.06, ease: "power2.out" }
+        { opacity: 1, y: 0, duration: 0.5, stagger: 0.06, ease: "power2.out" },
       );
     }
   }, [artworks]);
@@ -112,7 +120,9 @@ export default function SquarePage() {
           <div className="flex-1 flex items-center justify-center min-h-[300px]">
             <div className="flex flex-col items-center gap-3">
               <span className="w-8 h-8 border-3 border-sakura/30 border-t-sakura rounded-full animate-spin" />
-              <p className="text-sm text-text-secondary font-medium">正在加载作品...</p>
+              <p className="text-sm text-text-secondary font-medium">
+                正在加载作品...
+              </p>
             </div>
           </div>
         )}
@@ -123,7 +133,9 @@ export default function SquarePage() {
             <div className="w-16 h-16 rounded-2xl bg-macaron-blue-light flex items-center justify-center text-[#2F6196] mb-4">
               <Globe className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-bold text-text-primary">广场暂无作品</h3>
+            <h3 className="text-base font-bold text-text-primary">
+              广场暂无作品
+            </h3>
             <p className="text-xs text-text-secondary mt-1.5 max-w-sm">
               还没有人分享作品。成为第一个创作者吧！进入画板画出你的作品并保存即可自动分享到广场。
             </p>
@@ -142,7 +154,9 @@ export default function SquarePage() {
           <>
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-lg font-bold text-text-primary">全部作品</h2>
+                <h2 className="text-lg font-bold text-text-primary">
+                  全部作品
+                </h2>
                 <p className="text-xs text-text-secondary mt-0.5">
                   共 {artworks.length} 幅作品来自众多创作者
                 </p>

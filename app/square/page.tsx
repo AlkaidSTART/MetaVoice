@@ -76,7 +76,7 @@ export default function SquarePage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-surface font-sans select-none min-h-screen">
+    <div className="flex-1 flex flex-col bg-surface font-sans select-none h-full overflow-hidden">
       {/* Header */}
       <header className="h-14 bg-white border-b border-border-custom px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <button
@@ -101,7 +101,7 @@ export default function SquarePage() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 flex flex-col gap-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 flex flex-col gap-4 overflow-y-auto min-h-0">
         {/* Hero Banner */}
         <div className="bg-linear-to-br from-sakura-light via-white to-macaron-blue-light border border-border-custom rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 shadow-sm">
           <div className="w-14 h-14 rounded-2xl bg-white border border-border-custom flex items-center justify-center text-sakura shadow-sm shrink-0">

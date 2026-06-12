@@ -34,6 +34,10 @@ import {
   type IntentResult,
 } from "@/lib/voice/speechRecognition";
 import {
+  matchVoiceToAction,
+  executeAction,
+} from "@/lib/voice/voiceActionMapper";
+import {
   fetchArtwork,
   saveArtworkViaApi,
 } from "@/lib/api/artworks";
@@ -250,6 +254,16 @@ function CanvasContent() {
     if (!text.trim()) {
       setIsRecording(false);
       setMicState("idle");
+      return;
+    }
+
+    // Check if the command matches a UI navigation/action first
+    const matched = matchVoiceToAction(text);
+    if (matched) {
+      setIsRecording(false);
+      setMicState("success");
+      executeAction(matched.action);
+      setTimeout(() => setMicState("idle"), 1000);
       return;
     }
 
@@ -532,7 +546,7 @@ function CanvasContent() {
           <button
             onClick={() => startTransition(() => router.push("/square"))}
             disabled={isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-lavender hover:bg-[#F0EBFF]/40 text-text-secondary hover:text-[#6A4BC9] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            data-action="square"            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-lavender hover:bg-[#F0EBFF]/40 text-text-secondary hover:text-[#6A4BC9] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
           >
             <Globe className="w-3.5 h-3.5" />
             <span>创作广场</span>
@@ -540,7 +554,7 @@ function CanvasContent() {
           <button
             onClick={() => startTransition(() => router.push("/gallery"))}
             disabled={isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            data-action="gallery"            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
           >
             <FolderHeart className="w-3.5 h-3.5" />
             <span>我的作品库</span>
@@ -560,7 +574,7 @@ function CanvasContent() {
               />
               <button
                 onClick={handleLogout}
-                className="p-1.5 rounded-full hover:bg-[#FFF0EF] text-text-disabled hover:text-[#D04D43] transition-colors focus:outline-none"
+                data-action="logout"                className="p-1.5 rounded-full hover:bg-[#FFF0EF] text-text-disabled hover:text-[#D04D43] transition-colors focus:outline-none"
                 title="退出登录"
               >
                 <LogOut className="w-4 h-4" />
@@ -623,7 +637,7 @@ function CanvasContent() {
                   addToast("撤销操作", "info");
                 }}
                 disabled={!canUndo}
-                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                data-action="undo"                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
                 title="撤销"
               >
                 <Undo2 className="w-4 h-4" />
@@ -634,7 +648,7 @@ function CanvasContent() {
                   addToast("重做操作", "info");
                 }}
                 disabled={!canRedo}
-                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                data-action="redo"                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
                 title="重做"
               >
                 <Redo2 className="w-4 h-4" />
@@ -643,14 +657,14 @@ function CanvasContent() {
 
             <button
               onClick={handleSaveArtwork}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              data-action="save"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span className="hidden md:inline">保存到库</span>
             </button>
             <button
               onClick={handleExportPNG}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              data-action="export"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
             >
               <Download className="w-4 h-4" />
               <span className="hidden md:inline">导出 PNG</span>
@@ -660,7 +674,7 @@ function CanvasContent() {
                 canvasRef.current?.clear();
                 addToast("画布已清空", "warning");
               }}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43] cursor-pointer"
+              data-action="clear"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43] cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden md:inline">清空画布</span>
@@ -727,7 +741,7 @@ function CanvasContent() {
             />
 
             {/* Voice Control Core Button Area */}
-            <div className="h-[96px] flex flex-col items-center justify-center relative">
+            <div className="h-[96px] flex flex-col items-center justify-center relative" data-action="mic">
               <MicButton
                 state={micState}
                 onClick={handleMicTrigger}
@@ -750,7 +764,7 @@ export default function CanvasPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex-1 flex items-center justify-center bg-surface min-h-screen">
+        <div className="flex-1 flex items-center justify-center bg-surface h-full">
           <div className="text-center">
             <div className="w-10 h-10 border-4 border-sakura border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <p className="text-sm text-text-secondary font-bold">

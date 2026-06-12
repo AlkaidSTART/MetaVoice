@@ -185,7 +185,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-center items-center px-4 py-12 md:py-24 bg-surface font-sans select-none relative overflow-hidden min-h-screen">
+    <div className="flex-1 flex flex-col justify-center items-center px-4 py-8 md:py-12 bg-surface font-sans select-none relative overflow-hidden h-full">
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-macaron-blue-light/30 blur-3xl pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-sakura-light/40 blur-3xl pointer-events-none" />
 

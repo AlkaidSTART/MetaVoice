@@ -2,7 +2,11 @@
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Mic, Loader2 } from "lucide-react";
-import { matchVoiceToAction, executeAction, type ActionEntry } from "@/lib/voice/voiceActionMapper";
+import {
+  matchVoiceToAction,
+  executeAction,
+  type ActionEntry,
+} from "@/lib/voice/voiceActionMapper";
 
 interface GlobalVoiceControlProps {
   /** Which page we're on — used to resolve page-specific commands */
@@ -13,13 +17,17 @@ interface GlobalVoiceControlProps {
  * GlobalVoiceControl — a floating mic button that appears on every page.
  * Listens for voice commands and maps them to UI actions via the CustomCursor.
  */
-export default function GlobalVoiceControl({ pageName }: GlobalVoiceControlProps) {
+export default function GlobalVoiceControl({
+  pageName,
+}: GlobalVoiceControlProps) {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   const stopListening = useCallback(() => {
-    try { recognitionRef.current?.stop(); } catch {}
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
     setIsListening(false);
   }, []);
 

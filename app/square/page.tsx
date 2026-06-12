@@ -82,6 +82,7 @@ export default function SquarePage() {
         <button
           onClick={() => router.push("/canvas")}
           className="flex items-center gap-2 text-sm font-semibold text-text-secondary hover:text-text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-sakura rounded-md px-2.5 py-1.5 border border-border-custom/50 hover:bg-surface cursor-pointer"
+          data-action="nav-back"
         >
           <ChevronLeft className="w-4 h-4" />
           <span>返回画布</span>
@@ -93,6 +94,7 @@ export default function SquarePage() {
 
         <button
           onClick={() => router.push("/gallery")}
+          data-action="nav-gallery"
           className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer"
         >
           <Image className="w-3.5 h-3.5" />
@@ -116,6 +118,7 @@ export default function SquarePage() {
           <button
             onClick={() => router.push("/canvas")}
             className="flex items-center gap-2 px-5 py-2.5 bg-sakura hover:bg-[#FFA5B5] text-white rounded-xl font-bold text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
+            data-action="nav-canvas"
           >
             <Sparkles className="w-4 h-4" />
             <span>开始创作</span>

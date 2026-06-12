@@ -15,13 +15,41 @@ export type ActionEntry = {
  * Global page-level actions — work across ALL pages.
  */
 const PAGE_ACTIONS: ActionEntry[] = [
-  { keywords: ["画板", "画布", "画画", "绘图", "创作"], selector: "[data-action='nav-canvas']", label: "画板" },
-  { keywords: ["广场", "社区", "作品集", "大家"], selector: "[data-action='nav-square']", label: "广场" },
-  { keywords: ["画廊", "作品库", "我的作品", "图库"], selector: "[data-action='nav-gallery']", label: "作品库" },
-  { keywords: ["登录", "注册", "登陆"], selector: "[data-action='nav-login']", label: "登录" },
-  { keywords: ["退出", "登出", "注销", "离开"], selector: "[data-action='nav-logout']", label: "退出" },
-  { keywords: ["返回", "后退", "上一页", "回去"], selector: "[data-action='nav-back']", label: "返回" },
-  { keywords: ["录音", "录制", "开始", "说话", "听"], selector: "[data-action='mic']", label: "录音" },
+  {
+    keywords: ["画板", "画布", "画画", "绘图", "创作"],
+    selector: "[data-action='nav-canvas']",
+    label: "画板",
+  },
+  {
+    keywords: ["广场", "社区", "作品集", "大家"],
+    selector: "[data-action='square']",
+    label: "广场",
+  },
+  {
+    keywords: ["画廊", "作品库", "我的作品", "图库"],
+    selector: "[data-action='gallery']",
+    label: "作品库",
+  },
+  {
+    keywords: ["登录", "注册", "登陆"],
+    selector: "[data-action='nav-login']",
+    label: "登录",
+  },
+  {
+    keywords: ["退出", "登出", "注销", "离开"],
+    selector: "[data-action='logout']",
+    label: "退出",
+  },
+  {
+    keywords: ["返回", "后退", "上一页", "回去"],
+    selector: "[data-action='nav-back']",
+    label: "返回",
+  },
+  {
+    keywords: ["录音", "录制", "开始", "说话", "听"],
+    selector: "[data-action='mic']",
+    label: "录音",
+  },
 ];
 
 /**
@@ -29,11 +57,31 @@ const PAGE_ACTIONS: ActionEntry[] = [
  */
 const PAGE_ACTIONS_MAP: Record<string, ActionEntry[]> = {
   canvas: [
-    { keywords: ["撤销", "后退", "取消"], selector: "[data-action='undo']", label: "撤销" },
-    { keywords: ["重做", "前进", "恢复"], selector: "[data-action='redo']", label: "重做" },
-    { keywords: ["清空", "清除", "重新", "重置"], selector: "[data-action='clear']", label: "清空" },
-    { keywords: ["保存", "存"], selector: "[data-action='save']", label: "保存" },
-    { keywords: ["导出", "下载"], selector: "[data-action='export']", label: "导出" },
+    {
+      keywords: ["撤销", "后退", "取消"],
+      selector: "[data-action='undo']",
+      label: "撤销",
+    },
+    {
+      keywords: ["重做", "前进", "恢复"],
+      selector: "[data-action='redo']",
+      label: "重做",
+    },
+    {
+      keywords: ["清空", "清除", "重新", "重置"],
+      selector: "[data-action='clear']",
+      label: "清空",
+    },
+    {
+      keywords: ["保存", "存"],
+      selector: "[data-action='save']",
+      label: "保存",
+    },
+    {
+      keywords: ["导出", "下载"],
+      selector: "[data-action='export']",
+      label: "导出",
+    },
   ],
 };
 

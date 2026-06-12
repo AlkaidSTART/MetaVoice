@@ -526,6 +526,7 @@ function CanvasContent() {
           <span
             className="text-base font-black text-text-primary tracking-tight cursor-pointer"
             onClick={() => router.push("/login")}
+            data-action="nav-login"
           >
             VoiceCanvas
           </span>

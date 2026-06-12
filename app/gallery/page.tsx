@@ -123,6 +123,7 @@ export default function GalleryPage() {
         <button
           onClick={() => router.push("/canvas")}
           className="flex items-center gap-2 text-sm font-semibold text-text-secondary hover:text-text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-sakura rounded-md px-2.5 py-1.5 border border-border-custom/50 hover:bg-surface cursor-pointer"
+          data-action="nav-back"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>返回画布</span>
@@ -163,6 +164,7 @@ export default function GalleryPage() {
           <button
             onClick={() => router.push("/canvas")}
             className="flex items-center gap-2 px-4 py-2.5 bg-sakura hover:bg-sakura-light text-white hover:text-text-primary rounded-xl font-bold text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
+            data-action="nav-canvas"
           >
             <Palette className="w-4 h-4" />
             <span>开始创作</span>

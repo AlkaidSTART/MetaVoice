@@ -25,7 +25,7 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
       where: { isPublic: true },
       orderBy: { createdAt: "desc" },
       include: {
-        profile: {
+        user: {
           select: { name: true, avatarUrl: true },
         },
       },
@@ -41,8 +41,8 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
       is_public: art.isPublic,
       created_at: art.createdAt.toISOString(),
       updated_at: art.updatedAt.toISOString(),
-      user_name: art.profile?.name || "匿名用户",
-      user_avatar_url: art.profile?.avatarUrl || undefined,
+      user_name: art.user?.name || "匿名用户",
+      user_avatar_url: art.user?.avatarUrl || undefined,
     }));
   } catch (error) {
     console.error("Error fetching public artworks:", error);

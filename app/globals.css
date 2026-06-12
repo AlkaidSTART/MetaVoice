@@ -1,26 +1,123 @@
 @import "tailwindcss";
 
+@theme {
+  /* Brand Pastel Colors */
+  --color-sakura: #FFB7C5;
+  --color-sakura-light: #FFE4EA;
+  --color-macaron-blue: #B5D5F5;
+  --color-macaron-blue-light: #E3F1FF;
+  --color-mint: #B5E8C7;
+  --color-mint-light: #E5F9EE;
+  --color-butter: #FFE5A0;
+  --color-butter-light: #FFF7D6;
+  --color-lavender: #D4C5F5;
+  
+  /* Neutral Palette */
+  --color-surface: #FAFAF8;
+  --color-border-custom: #E8E8E4;
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #6B6B6B;
+  --color-text-disabled: #AEAEAE;
+
+  /* Typography */
+  --font-sans: var(--font-inter), 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: var(--font-mono-custom), 'SF Mono', 'JetBrains Mono', monospace;
+  
+  /* Layout constraints */
+  --header-height: 56px;
+  --toolbar-height: 48px;
+  --voice-area-height: 96px;
+}
+
+/* Base resets & theme styles */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg-base: #FFFFFF;
+  --color-text-base: #1A1A1A;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-base);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #FAFAF8;
+  color: #1A1A1A;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* WCAG 2.1 AA Focus Styles */
+:focus-visible {
+  outline: 3px solid #FFB7C5 !important;
+  outline-offset: 3px !important;
+  border-radius: inherit;
+}
+
+/* Interactive elements animations */
+.transition-standard {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Custom Webkit scrollbar for premium look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E8E8E4;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FFB7C5;
+}
+
+/* Pulsating Animation for Mic recording state */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Cursor blinking for transcript bar */
+@keyframes blink {
+  50% { opacity: 0; }
+}
+.transcript-cursor::after {
+  content: '|';
+  color: #FFB7C5;
+  animation: blink 1s step-start infinite;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+/* Respect user preferences regarding motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-pulse-ring {
+    animation: none !important;
+  }
 }

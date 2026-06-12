@@ -12,24 +12,44 @@ import {
 } from "lucide-react";
 import gsap from "gsap";
 import {
-  getArtworks,
+  getUserArtworks,
   deleteArtwork,
-  getCurrentUser,
-  ArtworkData,
-  UserProfile,
-} from "@/lib/db/mockDb";
+  ArtworkRecord,
+} from "@/lib/supabase/db";
+import { createClient } from "@/lib/supabase/client";
 
 export default function GalleryPage() {
   const router = useRouter();
-  const [artworks, setArtworks] = useState<ArtworkData[]>([]);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
+  const [userName, setUserName] = useState<string>("");
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Read from mock storage
-    setArtworks(getArtworks());
-    setUser(getCurrentUser());
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    setUserId(user.id);
+    setUserName(
+      user.user_metadata?.name || user.email?.split("@")[0] || "用户",
+    );
+    setAvatarUrl(user.user_metadata?.avatar_url || "");
+
+    const data = await getUserArtworks(user.id);
+    setArtworks(data);
+  };
 
   // GSAP Stagger Entrance
   useEffect(() => {
@@ -42,10 +62,10 @@ export default function GalleryPage() {
     }
   }, [artworks]);
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("确定要删除这幅画作吗？删除后不可恢复。")) {
-      deleteArtwork(id);
+      await deleteArtwork(id, userId);
       // Fade out target element using GSAP
       const card = document.getElementById(`card-${id}`);
       if (card) {
@@ -53,20 +73,23 @@ export default function GalleryPage() {
           scale: 0.9,
           opacity: 0,
           duration: 0.3,
-          onComplete: () => {
-            setArtworks(getArtworks());
+          onComplete: async () => {
+            const data = await getUserArtworks(userId);
+            setArtworks(data);
           },
         });
       } else {
-        setArtworks(getArtworks());
+        const data = await getUserArtworks(userId);
+        setArtworks(data);
       }
     }
   };
 
-  const handleDownload = (artwork: ArtworkData, e: React.MouseEvent) => {
+  const handleDownload = (artwork: ArtworkRecord, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!artwork.thumbnail_url) return;
     const link = document.createElement("a");
-    link.href = artwork.thumbnailUrl;
+    link.href = artwork.thumbnail_url;
     link.download = `${artwork.title || "未命名作品"}.png`;
     document.body.appendChild(link);
     link.click();
@@ -109,19 +132,18 @@ export default function GalleryPage() {
         </h1>
 
         <div className="flex items-center gap-3">
-          {user && (
+          {userName && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-text-secondary hidden md:block">
-                {user.name}
+                {userName}
               </span>
-              <img
-                src={
-                  user.avatarUrl ||
-                  "https://api.dicebear.com/7.x/adventurer/svg"
-                }
-                alt="Avatar"
-                className="w-8 h-8 rounded-full border border-sakura bg-sakura-light"
-              />
+              {avatarUrl && (
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  className="w-8 h-8 rounded-full border border-sakura bg-sakura-light"
+                />
+              )}
             </div>
           )}
         </div>
@@ -190,12 +212,18 @@ export default function GalleryPage() {
                 }
               >
                 {/* Image Preview */}
-                <div className="aspect-[4/3] w-full bg-[#FAFAF8] relative overflow-hidden border-b border-border-custom/50">
-                  <img
-                    src={art.thumbnailUrl}
-                    alt={art.title || "未命名作品"}
-                    className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-                  />
+                <div className="aspect-4/3 w-full bg-surface relative overflow-hidden border-b border-border-custom/50">
+                  {art.thumbnail_url ? (
+                    <img
+                      src={art.thumbnail_url}
+                      alt={art.title || "未命名作品"}
+                      className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-text-disabled">
+                      <ImageIcon className="w-10 h-10" />
+                    </div>
+                  )}
 
                   {/* Floating Action Bar (Pill overlay) */}
                   <div className="absolute bottom-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -226,7 +254,7 @@ export default function GalleryPage() {
                       {art.tags?.[0] || "Canvas"}
                     </span>
                     <span className="text-[10px] text-text-secondary font-medium">
-                      {formatRelativeTime(art.createdAt)}
+                      {formatRelativeTime(art.created_at)}
                     </span>
                   </div>
                 </div>

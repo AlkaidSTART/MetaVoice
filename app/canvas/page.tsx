@@ -102,26 +102,19 @@ function CanvasContent() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        // Fall back to mockDb for local development
-        const loggedUser = getCurrentUser();
-        if (!loggedUser.isLoggedIn) {
-          router.push("/login");
-          return;
-        }
-        setUser(loggedUser);
-      } else {
-        setUser({
-          id: user.id,
-          name: user.user_metadata?.name || user.email?.split("@")[0] || "用户",
-          email: user.email || "",
-          avatarUrl: user.user_metadata?.avatar_url,
-          isLoggedIn: true,
-        });
+        router.push("/login");
+        return;
       }
+      setUser({
+        id: user.id,
+        name: user.user_metadata?.name || user.email?.split("@")[0] || "用户",
+        email: user.email || "",
+        avatarUrl: user.user_metadata?.avatar_url,
+        isLoggedIn: true,
+      });
 
       if (artworkIdQuery) {
-        // Try Supabase first, then localStorage
-        const art = await getArtworkFromSupabase(artworkIdQuery);
+        const art = await getArtworkFromDb(artworkIdQuery);
         if (art) {
           setArtworkId(art.id);
           setArtworkTitle(art.title || "未命名画作");
@@ -136,25 +129,6 @@ function CanvasContent() {
               }
             }
           }, 100);
-        } else {
-          const artLocal = getArtwork(artworkIdQuery);
-          if (artLocal) {
-            setArtworkId(artLocal.id);
-            setArtworkTitle(artLocal.title || "未命名画作");
-            setTimeout(() => {
-              if (canvasRef.current && artLocal.canvasJson) {
-                try {
-                  canvasRef.current.setShapesData(
-                    JSON.parse(artLocal.canvasJson),
-                  );
-                  addToast("作品加载成功！", "success");
-                } catch (e) {
-                  console.error(e);
-                  addToast("解析作品数据失败", "error");
-                }
-              }
-            }, 100);
-          }
         }
       }
     };
@@ -384,21 +358,10 @@ function CanvasContent() {
     }
 
     const dataUrl = canvasRef.current.exportImage();
-
-    // Save to localStorage (mockDb) as fallback
-    const saved = saveArtwork(
-      artworkId,
-      artworkTitle,
-      JSON.stringify(shapesData),
-      dataUrl,
-    );
-    if (saved) {
-      setArtworkId(saved.id);
-    }
-
-    // Also save to Supabase (will auto-publish to Square)
     const userId = user?.id || "";
-    const supabaseResult = await saveArtworkToSupabase(
+
+    // Save to database (thumbnail uploaded to Supabase Storage "voice" bucket)
+    const result = await saveArtworkToDb(
       artworkId,
       userId,
       artworkTitle,
@@ -407,8 +370,8 @@ function CanvasContent() {
       ["Canvas"],
       true,
     );
-    if (supabaseResult) {
-      setArtworkId(supabaseResult.id);
+    if (result) {
+      setArtworkId(result.id);
     }
 
     // Confetti!
@@ -480,8 +443,9 @@ function CanvasContent() {
     );
   };
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     router.push("/login");
   };
 

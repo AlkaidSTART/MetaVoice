@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Extended user profile (synced with Supabase Auth via trigger)
+model Profile {
+  id        String    @id @default(uuid())
+  name      String    @default("新用户")
+  avatarUrl String?   @map("avatar_url")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  artworks  Artwork[]
+
+  @@map("profiles")
+}
+
+// Artwork model
+model Artwork {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  title        String   @default("未命名画作")
+  canvasJson   String?  @map("canvas_json")
+  thumbnailUrl String?  @map("thumbnail_url")
+  tags         String[] @default([])
+  isPublic     Boolean  @default(true) @map("is_public")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isPublic])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("artworks")
+}

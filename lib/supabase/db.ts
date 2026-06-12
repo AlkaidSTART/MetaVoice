@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma/client";
+import { uploadThumbnail } from "./storage";
 
 export type ArtworkRecord = {
   id: string;
@@ -52,7 +53,9 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
 /**
  * Fetch artworks owned by the current user.
  */
-export async function getUserArtworks(userId: string): Promise<ArtworkRecord[]> {
+export async function getUserArtworks(
+  userId: string,
+): Promise<ArtworkRecord[]> {
   try {
     const artworks = await prisma.artwork.findMany({
       where: { userId },
@@ -102,6 +105,8 @@ export async function getArtwork(id: string): Promise<ArtworkRecord | null> {
 
 /**
  * Save (insert or update) an artwork.
+ * Uploads the thumbnail data URL to Supabase Storage bucket "voice",
+ * then stores the public URL in the database.
  * For new artworks, auto-sets is_public=true so they appear in the Square.
  */
 export async function saveArtwork(
@@ -109,11 +114,18 @@ export async function saveArtwork(
   userId: string,
   title: string,
   canvasJson: string,
-  thumbnailUrl: string,
+  thumbnailDataUrl: string,
   tags: string[] = ["Canvas"],
   isPublic: boolean = true,
 ): Promise<ArtworkRecord | null> {
   try {
+    // Upload thumbnail to Supabase Storage first
+    const thumbnailUrl = await uploadThumbnail(userId, thumbnailDataUrl);
+    if (!thumbnailUrl) {
+      console.error("Failed to upload thumbnail to Storage");
+      return null;
+    }
+
     if (id) {
       // Update existing
       const art = await prisma.artwork.updateMany({
@@ -165,7 +177,10 @@ export async function saveArtwork(
 /**
  * Delete an artwork by ID (only if owned by current user).
  */
-export async function deleteArtwork(id: string, userId: string): Promise<boolean> {
+export async function deleteArtwork(
+  id: string,
+  userId: string,
+): Promise<boolean> {
   try {
     const result = await prisma.artwork.deleteMany({
       where: { id, userId },

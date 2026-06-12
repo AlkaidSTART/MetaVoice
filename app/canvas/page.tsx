@@ -35,18 +35,20 @@ import {
   COLOR_NAME_MAP,
 } from "@/lib/voice/speechRecognition";
 import {
-  saveArtwork,
-  getArtwork,
-  getCurrentUser,
-  logoutUser,
-  UserProfile,
-} from "@/lib/db/mockDb";
-import {
-  saveArtwork as saveArtworkToSupabase,
-  getArtwork as getArtworkFromSupabase,
+  saveArtwork as saveArtworkToDb,
+  getArtwork as getArtworkFromDb,
 } from "@/lib/supabase/db";
 import { createClient } from "@/lib/supabase/client";
 import canvasConfetti from "canvas-confetti";
+
+// User profile type used in the canvas page
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  isLoggedIn: boolean;
+}
 
 function CanvasContent() {
   const router = useRouter();
@@ -109,6 +111,7 @@ function CanvasContent() {
         setUser(loggedUser);
       } else {
         setUser({
+          id: user.id,
           name: user.user_metadata?.name || user.email?.split("@")[0] || "用户",
           email: user.email || "",
           avatarUrl: user.user_metadata?.avatar_url,
@@ -394,8 +397,10 @@ function CanvasContent() {
     }
 
     // Also save to Supabase (will auto-publish to Square)
+    const userId = user?.id || "";
     const supabaseResult = await saveArtworkToSupabase(
       artworkId,
+      userId,
       artworkTitle,
       JSON.stringify(shapesData),
       dataUrl,

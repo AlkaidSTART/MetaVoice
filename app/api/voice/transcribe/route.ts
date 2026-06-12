@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[api/voice/transcribe] request failed", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

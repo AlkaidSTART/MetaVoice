@@ -357,9 +357,14 @@ function CanvasContent() {
       },
       // onError
       (err) => {
-        console.error("Speech Recognition Error:", err);
-        if (err.error === "not-allowed") {
+        const normalizedError = VoiceRecognitionManager.normalizeError(err);
+        console.error("Speech Recognition Error:", normalizedError, err);
+        if (normalizedError.error === "not-allowed") {
           addToast("麦克风权限被拒绝，请在浏览器设置中开启后重试。", "error");
+        } else if (normalizedError.error === "service-not-allowed") {
+          addToast("当前浏览器或页面环境不允许语音识别，请改用 HTTPS 或 Chrome。", "error");
+        } else if (normalizedError.error === "network") {
+          addToast("语音识别网络异常，请检查网络后重试。", "warning");
         } else {
           addToast("语音输入遇到问题，请重新录制。", "warning");
         }
@@ -473,6 +478,19 @@ function CanvasContent() {
       setMicState("recording");
 
       if (voiceManagerRef.current) {
+        if (
+          typeof window !== "undefined" &&
+          window.isSecureContext === false &&
+          window.location.hostname !== "localhost" &&
+          window.location.hostname !== "127.0.0.1"
+        ) {
+          addToast("语音识别需要在 HTTPS 或 localhost 环境中使用。", "error");
+          setIsRecording(false);
+          setMicState("error");
+          setTimeout(() => setMicState("idle"), 1200);
+          return;
+        }
+
         voiceManagerRef.current.start();
       } else {
         // Fallback input box simulator for non-speech browsers (Safari on some platforms, tests, etc.)

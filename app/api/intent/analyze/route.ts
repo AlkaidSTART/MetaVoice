@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsed);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[api/intent/analyze] request failed", error);
     return NextResponse.json({ error: message, transcript: "" }, { status: 500 });
   }
 }

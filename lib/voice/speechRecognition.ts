@@ -17,6 +17,8 @@ type SpeechRecognitionEventLike = {
 type SpeechRecognitionErrorLike = {
   error: string;
   message?: string;
+  type?: string;
+  timeStamp?: number;
 };
 
 type SpeechRecognitionLike = {
@@ -387,5 +389,38 @@ export class VoiceRecognitionManager {
         console.error("SpeechRecognition stop error:", e);
       }
     }
+  }
+
+  public static normalizeError(error: unknown): SpeechRecognitionErrorLike {
+    if (!error || typeof error !== "object") {
+      return {
+        error: "unknown",
+        message: typeof error === "string" ? error : "Unknown speech recognition error",
+      };
+    }
+
+    const candidate = error as Record<string, unknown>;
+    const details = {
+      error:
+        typeof candidate.error === "string"
+          ? candidate.error
+          : typeof candidate.type === "string"
+            ? candidate.type
+            : "unknown",
+      message:
+        typeof candidate.message === "string"
+          ? candidate.message
+          : undefined,
+      type:
+        typeof candidate.type === "string"
+          ? candidate.type
+          : undefined,
+      timeStamp:
+        typeof candidate.timeStamp === "number"
+          ? candidate.timeStamp
+          : undefined,
+    };
+
+    return details;
   }
 }

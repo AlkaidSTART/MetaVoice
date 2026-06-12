@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mic, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
+import { Mic, Sparkles, LogIn, Mail, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
 import gsap from "gsap";
-import { loginUser } from "@/lib/db/mockDb";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,8 +13,14 @@ export default function LoginPage() {
   const illustrationRef = useRef<HTMLDivElement>(null);
   const particlesContainerRef = useRef<HTMLDivElement>(null);
 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
+
   useEffect(() => {
-    // 1. Entrance animation for text and card
     const tl = gsap.timeline();
     tl.fromTo(
       titleRef.current,
@@ -34,7 +40,6 @@ export default function LoginPage() {
         "-=0.6"
       );
 
-    // 2. Spawn floating particles flying out of the microphone
     if (particlesContainerRef.current) {
       const container = particlesContainerRef.current;
       const particleColors = ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0", "#D4C5F5"];
@@ -54,8 +59,7 @@ export default function LoginPage() {
         p.style.opacity = "0";
         p.style.left = "calc(50% - 12px)";
         p.style.bottom = "80px";
-        
-        // Shape styling
+
         if (type === "circle") {
           p.style.borderRadius = "50%";
         } else if (type === "triangle") {
@@ -73,16 +77,9 @@ export default function LoginPage() {
 
         container.appendChild(p);
 
-        // GSAP animate floating upwards
         gsap.fromTo(
           p,
-          {
-            x: 0,
-            y: 0,
-            rotation: 0,
-            scale: 0.3,
-            opacity: 0,
-          },
+          { x: 0, y: 0, rotation: 0, scale: 0.3, opacity: 0 },
           {
             x: `random(-140, 140)`,
             y: `random(-250, -120)`,
@@ -99,37 +96,81 @@ export default function LoginPage() {
     }
   }, []);
 
-  const handleLogin = (type: "google" | "wechat" | "guest") => {
-    let name = "访客用户";
-    let email = "guest@voicecanvas.com";
-    if (type === "google") {
-      name = "林哥哥";
-      email = "designer.lin@gmail.com";
-    } else if (type === "wechat") {
-      name = "小芽";
-      email = "xiaoya@wechat.com";
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+
+    if (!email.trim() || !password.trim()) {
+      setError("请输入邮箱和密码");
+      setIsLoading(false);
+      return;
     }
 
-    loginUser(name, email);
-    
-    // Scale down card and redirect
-    gsap.to(cardRef.current, {
-      scale: 0.95,
-      opacity: 0,
-      duration: 0.3,
-      onComplete: () => {
-        router.push("/canvas");
-      },
-    });
+    if (password.length < 6) {
+      setError("密码长度至少为 6 位");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      if (isSignUp) {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+        });
+        if (signUpError) {
+          setError(
+            signUpError.message === "User already registered"
+              ? "该邮箱已注册，请直接登录"
+              : signUpError.message
+          );
+          setIsLoading(false);
+          return;
+        }
+        setIsSignUp(false);
+        alert("注册成功！请查看邮箱确认链接，然后登录。如未收到，可直接尝试登录。");
+        setIsLoading(false);
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (signInError) {
+        setError(
+          signInError.message === "Invalid login credentials"
+            ? "邮箱或密码错误，请重试"
+            : signInError.message
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      gsap.to(cardRef.current, {
+        scale: 0.95,
+        opacity: 0,
+        duration: 0.3,
+        onComplete: () => {
+          router.push("/canvas");
+        },
+      });
+    } catch {
+      setError("网络错误，请稍后重试");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="flex-1 flex flex-col justify-center items-center px-4 py-12 md:py-24 bg-surface font-sans select-none relative overflow-hidden min-h-screen">
-      {/* Decorative colored blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-macaron-blue-light/30 blur-3xl pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-sakura-light/40 blur-3xl pointer-events-none" />
 
-      {/* Main Brand Header */}
       <div className="text-center mb-8 max-w-lg z-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FFEAEF] text-sakura border border-[#FFD5DE] rounded-full text-xs font-semibold mb-4 animate-pulse">
           <Sparkles className="w-3.5 h-3.5 text-[#E07A8F]" />
@@ -139,7 +180,7 @@ export default function LoginPage() {
           VoiceCanvas
         </h1>
         <p className="mt-3 text-base md:text-lg text-text-secondary font-medium">
-          用声音，创作你的世界 🎨
+          用声音，创作你的世界
         </p>
       </div>
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import CustomCursor from "@/components/ui/CustomCursor";
+import GlobalVoiceControl from "@/components/voice/GlobalVoiceControl";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,6 +34,7 @@ export default function RootLayout({
     >
       <body className="h-full flex flex-col bg-surface text-text-primary selection:bg-sakura/30 overflow-hidden">
         <CustomCursor />
+        <GlobalVoiceControl />
         {children}
       </body>
     </html>

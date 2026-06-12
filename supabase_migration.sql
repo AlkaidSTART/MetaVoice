@@ -1,10 +1,4 @@
--- ============================================
--- VoiceCanvas · Supabase 数据库初始化迁移
--- ============================================
--- 在 Supabase Dashboard → SQL Editor 中执行
--- ============================================
 
--- 0. 用户画像扩展 (自动同步 auth.users)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT '新用户',

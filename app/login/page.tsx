@@ -2,7 +2,16 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mic, Sparkles, LogIn, Mail, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
+import {
+  Mic,
+  Sparkles,
+  LogIn,
+  Mail,
+  Lock,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import gsap from "gsap";
 import { createClient } from "@/lib/supabase/client";
 
@@ -25,24 +34,30 @@ export default function LoginPage() {
     tl.fromTo(
       titleRef.current,
       { y: -30, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" }
+      { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" },
     )
       .fromTo(
         cardRef.current,
         { y: 40, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" },
-        "-=0.5"
+        "-=0.5",
       )
       .fromTo(
         illustrationRef.current,
         { scale: 0.9, opacity: 0 },
         { scale: 1, opacity: 1, duration: 1, ease: "back.out(1.2)" },
-        "-=0.6"
+        "-=0.6",
       );
 
     if (particlesContainerRef.current) {
       const container = particlesContainerRef.current;
-      const particleColors = ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0", "#D4C5F5"];
+      const particleColors = [
+        "#FFB7C5",
+        "#B5D5F5",
+        "#B5E8C7",
+        "#FFE5A0",
+        "#D4C5F5",
+      ];
       const particleTypes = ["circle", "square", "triangle", "star"];
       const particleCount = 12;
 
@@ -70,7 +85,8 @@ export default function LoginPage() {
           p.style.borderRight = `${size / 2}px solid transparent`;
           p.style.borderBottom = `${size}px solid ${color}`;
         } else if (type === "star") {
-          p.style.clipPath = "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
+          p.style.clipPath =
+            "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
         } else {
           p.style.borderRadius = "6px";
         }
@@ -90,7 +106,7 @@ export default function LoginPage() {
             delay: i * 0.45,
             repeat: -1,
             ease: "sine.out",
-          }
+          },
         );
       }
     }
@@ -125,13 +141,15 @@ export default function LoginPage() {
           setError(
             signUpError.message === "User already registered"
               ? "该邮箱已注册，请直接登录"
-              : signUpError.message
+              : signUpError.message,
           );
           setIsLoading(false);
           return;
         }
         setIsSignUp(false);
-        alert("注册成功！请查看邮箱确认链接，然后登录。如未收到，可直接尝试登录。");
+        alert(
+          "注册成功！请查看邮箱确认链接，然后登录。如未收到，可直接尝试登录。",
+        );
         setIsLoading(false);
         return;
       }
@@ -145,7 +163,7 @@ export default function LoginPage() {
         setError(
           signInError.message === "Invalid login credentials"
             ? "邮箱或密码错误，请重试"
-            : signInError.message
+            : signInError.message,
         );
         setIsLoading(false);
         return;
@@ -176,7 +194,10 @@ export default function LoginPage() {
           <Sparkles className="w-3.5 h-3.5 text-[#E07A8F]" />
           <span className="text-[#B3455C]">七牛云黑客松 MVP 创意作品</span>
         </div>
-        <h1 ref={titleRef} className="text-3xl md:text-5xl font-black tracking-tight text-text-primary leading-tight">
+        <h1
+          ref={titleRef}
+          className="text-3xl md:text-5xl font-black tracking-tight text-text-primary leading-tight"
+        >
           VoiceCanvas
         </h1>
         <p className="mt-3 text-base md:text-lg text-text-secondary font-medium">
@@ -191,15 +212,22 @@ export default function LoginPage() {
           className="flex-1 flex flex-col items-center justify-center relative w-full max-w-[320px] aspect-square bg-white border border-border-custom rounded-3xl shadow-lg p-6 overflow-hidden"
         >
           {/* Particles container for flying shapes */}
-          <div ref={particlesContainerRef} className="absolute inset-0 pointer-events-none" />
-          
+          <div
+            ref={particlesContainerRef}
+            className="absolute inset-0 pointer-events-none"
+          />
+
           {/* Main animated mic illustration */}
           <div className="relative w-28 h-28 rounded-full bg-sakura-light border-4 border-white flex items-center justify-center shadow-md z-10">
             <Mic className="w-12 h-12 text-[#B3455C]" />
           </div>
           <div className="mt-6 text-center z-10">
-            <p className="text-sm font-bold text-text-primary">说出指令，即刻绘图</p>
-            <p className="text-xs text-text-secondary mt-1">“画一个红色的圆形在中间”</p>
+            <p className="text-sm font-bold text-text-primary">
+              说出指令，即刻绘图
+            </p>
+            <p className="text-xs text-text-secondary mt-1">
+              “画一个红色的圆形在中间”
+            </p>
           </div>
         </div>
 
@@ -209,7 +237,9 @@ export default function LoginPage() {
           className="w-full max-w-[380px] bg-white border border-border-custom shadow-xl rounded-3xl p-8 flex flex-col gap-6"
         >
           <div className="text-center lg:text-left">
-            <h2 className="text-xl font-bold text-text-primary">开启你的创作之旅</h2>
+            <h2 className="text-xl font-bold text-text-primary">
+              开启你的创作之旅
+            </h2>
             <p className="text-xs text-text-secondary mt-1">
               免除键盘与鼠标，使用纯语音画板表达你的创意
             </p>
@@ -221,7 +251,12 @@ export default function LoginPage() {
               onClick={() => handleLogin("google")}
               className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-[#FAFAF8] hover:bg-[#F2F2EF] border border-[#E0E0DB] rounded-2xl font-bold text-sm text-text-primary transition-all duration-200 active:scale-[0.98] cursor-pointer"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" width="24" height="24">
+              <svg
+                className="w-5 h-5"
+                viewBox="0 0 24 24"
+                width="24"
+                height="24"
+              >
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -256,7 +291,9 @@ export default function LoginPage() {
 
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-border-custom/60"></div>
-            <span className="flex-shrink mx-3 text-xs text-text-disabled font-medium">或者</span>
+            <span className="flex-shrink mx-3 text-xs text-text-disabled font-medium">
+              或者
+            </span>
             <div className="flex-grow border-t border-border-custom/60"></div>
           </div>
 
@@ -272,11 +309,13 @@ export default function LoginPage() {
           {/* Accessibility Info Footer */}
           <div className="flex gap-2 items-start bg-surface rounded-xl p-3 border border-border-custom/30 text-[11px] text-text-secondary leading-normal">
             <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D32] flex-shrink-0 mt-0.5" />
-            <span>无障碍模式已默认开启：界面已针对肢体障碍人士与儿童进行了高对比度、大按键及防抖优化。</span>
+            <span>
+              无障碍模式已默认开启：界面已针对肢体障碍人士与儿童进行了高对比度、大按键及防抖优化。
+            </span>
           </div>
         </div>
       </div>
-      
+
       {/* Slogan Footer */}
       <footer className="mt-16 text-center text-xs text-text-disabled font-medium z-10">
         © 2026 VoiceCanvas · 让创作平权 · 每个人都有表达美的自由

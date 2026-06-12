@@ -31,7 +31,7 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
         name,
         avatar_url
       )
-    `
+    `,
     )
     .eq("is_public", true)
     .order("created_at", { ascending: false });
@@ -103,7 +103,7 @@ export async function saveArtwork(
   canvasJson: string,
   thumbnailUrl: string,
   tags: string[] = ["Canvas"],
-  isPublic: boolean = true
+  isPublic: boolean = true,
 ): Promise<ArtworkRecord | null> {
   const supabase = createClient();
 

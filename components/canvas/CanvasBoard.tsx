@@ -300,14 +300,12 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
             );
           },
           onComplete: () => {
-            // Freeze final values and push to history
-            setShapes((currentShapes) => {
-              const finalized = currentShapes.map((s) =>
-                s.id === shapeId ? { ...s, renderScale: 1, opacity: 1 } : s,
-              );
-              pushHistory(finalized);
-              return finalized;
-            });
+            // Freeze final values, then commit history outside the state updater.
+            const finalized = [
+              ...nextShapes.slice(0, -1),
+              { ...newShape, renderScale: 1, opacity: 1 },
+            ];
+            pushHistory(finalized);
           },
         });
       },

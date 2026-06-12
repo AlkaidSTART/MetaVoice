@@ -72,7 +72,7 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
         {/* Header */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold text-sakura tracking-wider uppercase">
-            🎤 确认你的意图
+            确认你的意图
           </span>
           <h2 id="intent-modal-title" className="text-lg font-bold text-text-primary">
             我听到了...
@@ -98,7 +98,7 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
               </div>
               <div>
                 <span className="block text-xs font-bold text-text-disabled">按 "1" 选择</span>
-                <span className="text-sm font-bold text-[#2F6196]">🎨 绘制图形</span>
+                <span className="text-sm font-bold text-[#2F6196]">绘制图形</span>
               </div>
             </button>
 
@@ -112,7 +112,7 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
               </div>
               <div>
                 <span className="block text-xs font-bold text-text-disabled">按 "2" 选择</span>
-                <span className="text-sm font-bold text-[#6A4BC9]">✨ AI 生图</span>
+                <span className="text-sm font-bold text-[#6A4BC9]">AI 生图</span>
               </div>
             </button>
           </div>
@@ -121,7 +121,7 @@ export default function IntentModal({ isOpen, transcript, onSelect, onClose }: I
         {/* Accessibility Helper Label */}
         <div className="text-center bg-surface border border-border-custom/20 rounded-lg py-1.5 px-3">
           <p className="text-xs font-medium text-text-secondary leading-normal">
-            💡 <span className="font-semibold text-text-primary">说“1”或“2”</span> 可以通过语音直接选择，或者点击上方按钮。
+            <span className="font-semibold text-text-primary">说"1"或"2"</span> 可以通过语音直接选择，或者点击上方按钮。
           </p>
         </div>
 

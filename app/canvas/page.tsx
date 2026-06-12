@@ -14,7 +14,8 @@ import {
   FolderHeart, 
   LogOut,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Globe
 } from "lucide-react";
 import { CanvasBoardRef, CanvasShape } from "@/components/canvas/CanvasBoard";
 import CanvasBoard from "@/components/canvas/CanvasBoard";
@@ -24,6 +25,8 @@ import IntentModal from "@/components/voice/IntentModal";
 import ToastContainer, { ToastMessage, ToastType } from "@/components/ui/Toast";
 import { parseTranscript, VoiceRecognitionManager, COLOR_NAME_MAP } from "@/lib/voice/speechRecognition";
 import { saveArtwork, getArtwork, getCurrentUser, logoutUser, UserProfile } from "@/lib/db/mockDb";
+import { saveArtwork as saveArtworkToSupabase, getArtwork as getArtworkFromSupabase } from "@/lib/supabase/db";
+import { createClient } from "@/lib/supabase/client";
 import canvasConfetti from "canvas-confetti";
 
 function CanvasContent() {
@@ -69,29 +72,66 @@ function CanvasContent() {
 
   // 1. Initial configuration: check login and query param
   useEffect(() => {
-    const loggedUser = getCurrentUser();
-    setUser(loggedUser);
-
-    if (artworkIdQuery) {
-      const art = getArtwork(artworkIdQuery);
-      if (art) {
-        setArtworkId(art.id);
-        setArtworkTitle(art.title || "未命名画作");
-        
-        // Wait for CanvasBoard to render and mount ref
-        setTimeout(() => {
-          if (canvasRef.current && art.canvasJson) {
-            try {
-              canvasRef.current.setShapesData(JSON.parse(art.canvasJson));
-              addToast("作品加载成功！", "success");
-            } catch (e) {
-              console.error(e);
-              addToast("解析作品数据失败", "error");
-            }
-          }
-        }, 100);
+    const checkAuth = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        // Fall back to mockDb for local development
+        const loggedUser = getCurrentUser();
+        if (!loggedUser.isLoggedIn) {
+          router.push("/login");
+          return;
+        }
+        setUser(loggedUser);
+      } else {
+        setUser({
+          name: user.user_metadata?.name || user.email?.split("@")[0] || "用户",
+          email: user.email || "",
+          avatarUrl: user.user_metadata?.avatar_url,
+          isLoggedIn: true,
+        });
       }
-    }
+
+      if (artworkIdQuery) {
+        // Try Supabase first, then localStorage
+        const art = await getArtworkFromSupabase(artworkIdQuery);
+        if (art) {
+          setArtworkId(art.id);
+          setArtworkTitle(art.title || "未命名画作");
+          setTimeout(() => {
+            if (canvasRef.current && art.canvas_json) {
+              try {
+                canvasRef.current.setShapesData(JSON.parse(art.canvas_json));
+                addToast("作品加载成功！", "success");
+              } catch (e) {
+                console.error(e);
+                addToast("解析作品数据失败", "error");
+              }
+            }
+          }, 100);
+        } else {
+          const artLocal = getArtwork(artworkIdQuery);
+          if (artLocal) {
+            setArtworkId(artLocal.id);
+            setArtworkTitle(artLocal.title || "未命名画作");
+            setTimeout(() => {
+              if (canvasRef.current && artLocal.canvasJson) {
+                try {
+                  canvasRef.current.setShapesData(JSON.parse(artLocal.canvasJson));
+                  addToast("作品加载成功！", "success");
+                } catch (e) {
+                  console.error(e);
+                  addToast("解析作品数据失败", "error");
+                }
+              }
+            }, 100);
+          }
+        }
+      }
+    };
+
+    checkAuth();
   }, [artworkIdQuery]);
 
   // 2. Initialize Voice Recognition Manager
@@ -256,7 +296,7 @@ function CanvasContent() {
     } 
     else if (option === "ai_generate") {
       // Simulate Qwen AI Image generation
-      addToast("🎨 AI 生图排队中，正在合成场景图像...", "info");
+      addToast("AI 生图排队中，正在合成场景图像...", "info");
       setMicState("processing");
       setIsProcessing(true);
 
@@ -284,7 +324,7 @@ function CanvasContent() {
           origin: { y: 0.7 }
         });
 
-        addToast("✨ AI 场景生成并载入画布成功！", "success");
+        addToast("AI 场景生成并载入画布成功！", "success");
         
         setTimeout(() => setMicState("idle"), 1200);
       }, 3500); // 3.5s simulated generation time
@@ -292,7 +332,7 @@ function CanvasContent() {
   };
 
   // 6. Manual Actions
-  const handleSaveArtwork = () => {
+  const handleSaveArtwork = async () => {
     if (!canvasRef.current) return;
     const shapesData = canvasRef.current.getShapesData();
     if (shapesData.length === 0) {
@@ -301,9 +341,26 @@ function CanvasContent() {
     }
 
     const dataUrl = canvasRef.current.exportImage();
-    const saved = saveArtwork(artworkId, artworkTitle, JSON.stringify(shapesData), dataUrl);
-    setArtworkId(saved.id);
     
+    // Save to localStorage (mockDb) as fallback
+    const saved = saveArtwork(artworkId, artworkTitle, JSON.stringify(shapesData), dataUrl);
+    if (saved) {
+      setArtworkId(saved.id);
+    }
+
+    // Also save to Supabase (will auto-publish to Square)
+    const supabaseResult = await saveArtworkToSupabase(
+      artworkId,
+      artworkTitle,
+      JSON.stringify(shapesData),
+      dataUrl,
+      ["Canvas"],
+      true
+    );
+    if (supabaseResult) {
+      setArtworkId(supabaseResult.id);
+    }
+
     // Confetti!
     canvasConfetti({
       particleCount: 60,
@@ -311,7 +368,7 @@ function CanvasContent() {
       colors: ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0"]
     });
 
-    addToast(`作品 "${artworkTitle}" 保存成功！`, "success");
+    addToast(`作品 "${artworkTitle}" 保存成功！已同步到广场`, "success");
   };
 
   const handleExportPNG = () => {
@@ -433,6 +490,14 @@ function CanvasContent() {
 
         {/* Right: Actions & User */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => startTransition(() => router.push("/square"))}
+            disabled={isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-lavender hover:bg-[#F0EBFF]/40 text-text-secondary hover:text-[#6A4BC9] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>创作广场</span>
+          </button>
           <button
             onClick={() => startTransition(() => router.push("/gallery"))}
             disabled={isPending}

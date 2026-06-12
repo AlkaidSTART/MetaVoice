@@ -41,11 +41,22 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
     return [];
   }
 
-  return (data || []).map((item: any) => ({
-    ...item,
-    user_name: item.profiles?.name || "匿名用户",
-    user_avatar_url: item.profiles?.avatar_url || null,
-  }));
+  return (data || []).map((item: Record<string, unknown>) => {
+    const profiles = item.profiles as { name?: string; avatar_url?: string } | undefined;
+    return {
+      id: item.id as string,
+      user_id: item.user_id as string,
+      title: item.title as string,
+      canvas_json: item.canvas_json as string | null,
+      thumbnail_url: item.thumbnail_url as string | null,
+      tags: item.tags as string[],
+      is_public: item.is_public as boolean,
+      created_at: item.created_at as string,
+      updated_at: item.updated_at as string,
+      user_name: profiles?.name || "匿名用户",
+      user_avatar_url: profiles?.avatar_url,
+    } as ArtworkRecord;
+  });
 }
 
 /**

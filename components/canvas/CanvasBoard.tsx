@@ -158,7 +158,7 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
             ctx.fillStyle = "#6B6B6B";
             ctx.font = "14px Inter";
             ctx.textAlign = "center";
-            ctx.fillText("🎨 正在加载 AI 图像...", shape.x, shape.y);
+            ctx.fillText("正在加载 AI 图像...", shape.x, shape.y);
           }
         } 
         else if (shape.type === "circle") {

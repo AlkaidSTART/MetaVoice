@@ -92,7 +92,7 @@ export default function GalleryPage() {
         </button>
 
         <h1 className="text-md font-extrabold text-text-primary tracking-wide absolute left-1/2 transform -translate-x-1/2">
-          🖼️ 我的画廊
+          我的画廊
         </h1>
 
         <div className="flex items-center gap-3">

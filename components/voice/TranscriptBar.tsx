@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { MessageSquare } from "lucide-react";
 import { COLOR_MAP } from "@/lib/voice/speechRecognition";
 
 interface TranscriptBarProps {
@@ -59,7 +60,7 @@ export default function TranscriptBar({ transcript, isRecording, isProcessing }:
             className="inline-block px-2 py-0.5 mx-0.5 rounded-full text-xs font-semibold border border-sakura-light"
             style={{ backgroundColor: colorHex + "30", color: "#1A1A1A" }}
           >
-            🎨 {colorName}
+            {colorName}
           </span>
         );
       } 
@@ -70,7 +71,7 @@ export default function TranscriptBar({ transcript, isRecording, isProcessing }:
             key={idx} 
             className="inline-block px-2 py-0.5 mx-0.5 bg-macaron-blue-light text-[#2F6196] border border-[#d6e9fc] rounded-md text-xs font-semibold"
           >
-            📐 {shapeName}
+            {shapeName}
           </span>
         );
       } 
@@ -81,7 +82,7 @@ export default function TranscriptBar({ transcript, isRecording, isProcessing }:
             key={idx} 
             className="inline-block px-2 py-0.5 mx-0.5 bg-mint-light text-[#2E7D32] border border-[#d3f2df] rounded-md text-xs font-semibold"
           >
-            ⚡ {actionName}
+            {actionName}
           </span>
         );
       }
@@ -97,7 +98,8 @@ export default function TranscriptBar({ transcript, isRecording, isProcessing }:
         role="status"
         aria-live="polite"
       >
-        💬 语音指令结果将在这里显示，点击下方麦克风并说话...
+        <MessageSquare className="w-4 h-4 text-text-disabled flex-shrink-0" />
+        <span>语音指令结果将在这里显示，点击下方麦克风并说话...</span>
       </div>
     );
   }

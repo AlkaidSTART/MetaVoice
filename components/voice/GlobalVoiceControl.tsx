@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Mic, Loader2, Ear, Sparkles } from "lucide-react";
 import {
   matchVoiceToAction,
@@ -10,8 +11,13 @@ import {
 type WakeState = "sleeping" | "waking" | "listening" | "processing";
 
 const WAKE_WORDS = [
-  "小a", "小诶", "hey小a", "嘿小a",
-  "你好小a", "hi小a", "嗨小a",
+  "小a",
+  "小诶",
+  "hey小a",
+  "嘿小a",
+  "你好小a",
+  "hi小a",
+  "嗨小a",
 ];
 
 interface SpeechRecog extends EventTarget {
@@ -24,13 +30,17 @@ interface SpeechRecog extends EventTarget {
     | ((
         e: {
           resultIndex: number;
-          results: { [i: number]: { [j: number]: { transcript: string } }; length: number };
+          results: {
+            [i: number]: { [j: number]: { transcript: string } };
+            length: number;
+          };
         },
       ) => void)
     | null;
   onerror: (() => void) | null;
   onend: (() => void) | null;
 }
+
 type SRCtor = { new (): SpeechRecog };
 
 function getSR(): SRCtor | null {
@@ -44,121 +54,162 @@ export default function GlobalVoiceControl({
 }: {
   pageName?: string;
 }) {
+  const pathname = usePathname();
+  const isCanvasPage = pathname === "/canvas";
   const [wakeState, setWakeState] = useState<WakeState>("sleeping");
   const wakeRef = useRef<SpeechRecog | null>(null);
   const cmdRef = useRef<SpeechRecog | null>(null);
+  const wakeRetryTimerRef = useRef<number | null>(null);
+  const transitionTimerRef = useRef<number | null>(null);
+  const scheduleWakeRef = useRef<(delay?: number) => void>(() => {});
 
-  // Refs to break circular deps between callbacks
-  const doWake = useRef(() => {});
-  const doCmd = useRef(() => {});
-
-  // ── Command listener (single-shot) ──
-  doCmd.current = () => {
-    const Ctor = getSR();
-    if (!Ctor) return;
-    const cmd = new Ctor();
-    cmd.continuous = false;
-    cmd.interimResults = false;
-    cmd.lang = "zh-CN";
-    cmd.onresult = (e) => {
-      const text = e.results[0][0].transcript;
-      setWakeState("processing");
-      const matched = matchVoiceToAction(text, pageName);
-      if (matched) executeAction(matched.action);
-      setTimeout(() => {
-        setWakeState("sleeping");
-        setTimeout(() => doWake.current(), 500);
-      }, 1500);
-    };
-    cmd.onerror = () => {
-      setWakeState("sleeping");
-      setTimeout(() => doWake.current(), 500);
-    };
-    cmd.onend = () => {
-      setWakeState((p) => {
-        if (p === "listening") {
-          setTimeout(() => {
-            setWakeState("sleeping");
-            setTimeout(() => doWake.current(), 500);
-          }, 300);
-          return "sleeping";
-        }
-        return p;
-      });
-    };
-    cmdRef.current = cmd;
-    cmd.start();
-    setWakeState("listening");
-  };
-
-  // ── Wake-word listener (continuous) ──
-  doWake.current = () => {
-    const Ctor = getSR();
-    if (!Ctor) return;
-    const wake = new Ctor();
-    wake.continuous = true;
-    wake.interimResults = true;
-    wake.lang = "zh-CN";
-    wake.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript.toLowerCase().replace(/\s/g, "");
-        for (const ww of WAKE_WORDS) {
-          if (t.includes(ww)) {
-            wake.stop();
-            setWakeState("waking");
-            setTimeout(() => doCmd.current(), 400);
-            return;
-          }
-        }
-      }
-    };
-    wake.onerror = () => setTimeout(() => doWake.current(), 1000);
-    wake.onend = () => {
-      setWakeState((p) => {
-        if (p === "sleeping") setTimeout(() => doWake.current(), 300);
-        return p;
-      });
-    };
-    wakeRef.current = wake;
-    wake.start();
-  };
-
-  // ── Manual toggle ──
-  const handleManualToggle = useCallback(() => {
-    if (wakeState === "sleeping") {
-      wakeRef.current?.stop();
-      setWakeState("waking");
-      setTimeout(() => doCmd.current(), 400);
-    } else {
-      cmdRef.current?.stop();
-      wakeRef.current?.stop();
-      setWakeState("sleeping");
-      setTimeout(() => doWake.current(), 500);
+  const clearTimers = useCallback(() => {
+    if (wakeRetryTimerRef.current !== null) {
+      window.clearTimeout(wakeRetryTimerRef.current);
+      wakeRetryTimerRef.current = null;
     }
-  }, [wakeState]);
-
-  // ── Init ──
-  useEffect(() => {
-    if (!getSR()) return;
-    const t = setTimeout(() => doWake.current(), 1500);
-    return () => {
-      clearTimeout(t);
-      wakeRef.current?.stop();
-      cmdRef.current?.stop();
-    };
+    if (transitionTimerRef.current !== null) {
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+    }
   }, []);
 
-  // ── Render ──
+  const stopAllRecognition = useCallback(() => {
+    wakeRef.current?.stop();
+    cmdRef.current?.stop();
+    wakeRef.current = null;
+    cmdRef.current = null;
+  }, []);
+
+  const scheduleWake = useCallback(
+    (delay = 300) => {
+      clearTimers();
+      wakeRetryTimerRef.current = window.setTimeout(() => {
+        const Ctor = getSR();
+        if (!Ctor || isCanvasPage) return;
+
+        const wake = new Ctor();
+        wake.continuous = true;
+        wake.interimResults = true;
+        wake.lang = "zh-CN";
+        wake.onresult = (e) => {
+          for (let i = e.resultIndex; i < e.results.length; i += 1) {
+            const transcript = e.results[i][0].transcript
+              .toLowerCase()
+              .replace(/\s/g, "");
+            for (const wakeWord of WAKE_WORDS) {
+              if (transcript.includes(wakeWord)) {
+                wake.stop();
+                setWakeState("waking");
+                transitionTimerRef.current = window.setTimeout(() => {
+                  const CommandCtor = getSR();
+                  if (!CommandCtor || isCanvasPage) return;
+
+                  const cmd = new CommandCtor();
+                  cmd.continuous = false;
+                  cmd.interimResults = false;
+                  cmd.lang = "zh-CN";
+                  cmd.onresult = (resultEvent) => {
+                    const text = resultEvent.results[0][0].transcript;
+                    setWakeState("processing");
+                    const matched = matchVoiceToAction(text, pageName);
+                    if (matched) executeAction(matched.action);
+
+                    transitionTimerRef.current = window.setTimeout(() => {
+                      setWakeState("sleeping");
+                      scheduleWakeRef.current(500);
+                    }, 1500);
+                  };
+                  cmd.onerror = () => {
+                    setWakeState("sleeping");
+                    scheduleWakeRef.current(500);
+                  };
+                  cmd.onend = () => {
+                    setWakeState((prev) => {
+                      if (prev === "listening") {
+                        scheduleWakeRef.current(500);
+                        return "sleeping";
+                      }
+                      return prev;
+                    });
+                  };
+                  cmdRef.current = cmd;
+                  cmd.start();
+                  setWakeState("listening");
+                }, 400);
+                return;
+              }
+            }
+          }
+        };
+        wake.onerror = () => {
+          scheduleWakeRef.current(1000);
+        };
+        wake.onend = () => {
+          if (!isCanvasPage) {
+            scheduleWakeRef.current(300);
+          }
+        };
+        wakeRef.current = wake;
+        wake.start();
+      }, delay);
+    },
+    [clearTimers, isCanvasPage, pageName],
+  );
+
+  useEffect(() => {
+    scheduleWakeRef.current = scheduleWake;
+  }, [scheduleWake]);
+
+  const handleManualToggle = useCallback(() => {
+    if (isCanvasPage) return;
+
+    if (wakeState === "sleeping") {
+      stopAllRecognition();
+      clearTimers();
+      setWakeState("waking");
+      scheduleWake(0);
+      return;
+    }
+
+    stopAllRecognition();
+    clearTimers();
+    setWakeState("sleeping");
+    scheduleWake(500);
+  }, [clearTimers, isCanvasPage, scheduleWake, stopAllRecognition, wakeState]);
+
+  useEffect(() => {
+    if (!getSR() || isCanvasPage) {
+      clearTimers();
+      stopAllRecognition();
+      return;
+    }
+
+    scheduleWake(1500);
+    return () => {
+      clearTimers();
+      stopAllRecognition();
+    };
+  }, [clearTimers, isCanvasPage, scheduleWake, stopAllRecognition]);
+
+  if (isCanvasPage) {
+    return null;
+  }
+
   const label: Record<WakeState, string> = {
-    sleeping: "语音唤醒", waking: "唤醒中...",
-    listening: "聆听中...", processing: "处理中...",
+    sleeping: "语音唤醒",
+    waking: "唤醒中...",
+    listening: "聆听中...",
+    processing: "处理中...",
   };
+
   const icon: Record<WakeState, React.ReactNode> = {
     sleeping: <Ear className="w-5 h-5" />,
     waking: <Loader2 className="w-5 h-5 animate-spin" />,
     listening: <Mic className="w-5 h-5" />,
     processing: <Sparkles className="w-5 h-5" />,
   };
+
   const active = wakeState !== "sleeping";
 
   return (

@@ -11,10 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import gsap from "gsap";
-import {
-  deleteArtworkViaApi,
-  fetchUserArtworks,
-} from "@/lib/api/artworks";
+import { deleteArtworkViaApi, fetchUserArtworks } from "@/lib/api/artworks";
 import type { ArtworkRecord } from "@/lib/supabase/db";
 import { createClient } from "@/lib/supabase/client";
 

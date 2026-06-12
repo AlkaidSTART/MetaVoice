@@ -37,10 +37,7 @@ import {
   matchVoiceToAction,
   executeAction,
 } from "@/lib/voice/voiceActionMapper";
-import {
-  fetchArtwork,
-  saveArtworkViaApi,
-} from "@/lib/api/artworks";
+import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
 import { analyzeIntent, generateImage } from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
 import canvasConfetti from "canvas-confetti";
@@ -157,7 +154,11 @@ function CanvasContent() {
     try {
       const blob = await (await fetch(dataUrl)).blob();
       const formData = new FormData();
-      formData.append("file", blob, `${artworkTitle || "voicecanvas_artwork"}.png`);
+      formData.append(
+        "file",
+        blob,
+        `${artworkTitle || "voicecanvas_artwork"}.png`,
+      );
 
       const response = await fetch("/api/storage/upload", {
         method: "POST",
@@ -210,7 +211,15 @@ function CanvasContent() {
     }
 
     if (type === "canvas") {
-      const { action, shape, color, colorName, position, size, text: textDetail } = canvasOp;
+      const {
+        action,
+        shape,
+        color,
+        colorName,
+        position,
+        size,
+        text: textDetail,
+      } = canvasOp;
 
       if (action === "draw" && shape) {
         canvasRef.current?.addShape(
@@ -371,7 +380,10 @@ function CanvasContent() {
       voiceManagerRef.current = manager;
     } else {
       setTimeout(() => {
-        addToast("您的浏览器不支持原生语音识别，已激活模拟命令输入栏。", "info");
+        addToast(
+          "您的浏览器不支持原生语音识别，已激活模拟命令输入栏。",
+          "info",
+        );
       }, 0);
     }
 
@@ -546,7 +558,8 @@ function CanvasContent() {
           <button
             onClick={() => startTransition(() => router.push("/square"))}
             disabled={isPending}
-            data-action="square"            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-lavender hover:bg-[#F0EBFF]/40 text-text-secondary hover:text-[#6A4BC9] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            data-action="square"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-lavender hover:bg-[#F0EBFF]/40 text-text-secondary hover:text-[#6A4BC9] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
           >
             <Globe className="w-3.5 h-3.5" />
             <span>创作广场</span>
@@ -554,7 +567,8 @@ function CanvasContent() {
           <button
             onClick={() => startTransition(() => router.push("/gallery"))}
             disabled={isPending}
-            data-action="gallery"            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            data-action="gallery"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
           >
             <FolderHeart className="w-3.5 h-3.5" />
             <span>我的作品库</span>
@@ -574,7 +588,8 @@ function CanvasContent() {
               />
               <button
                 onClick={handleLogout}
-                data-action="logout"                className="p-1.5 rounded-full hover:bg-[#FFF0EF] text-text-disabled hover:text-[#D04D43] transition-colors focus:outline-none"
+                data-action="logout"
+                className="p-1.5 rounded-full hover:bg-[#FFF0EF] text-text-disabled hover:text-[#D04D43] transition-colors focus:outline-none"
                 title="退出登录"
               >
                 <LogOut className="w-4 h-4" />
@@ -637,7 +652,8 @@ function CanvasContent() {
                   addToast("撤销操作", "info");
                 }}
                 disabled={!canUndo}
-                data-action="undo"                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                data-action="undo"
+                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
                 title="撤销"
               >
                 <Undo2 className="w-4 h-4" />
@@ -648,7 +664,8 @@ function CanvasContent() {
                   addToast("重做操作", "info");
                 }}
                 disabled={!canRedo}
-                data-action="redo"                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                data-action="redo"
+                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
                 title="重做"
               >
                 <Redo2 className="w-4 h-4" />
@@ -657,14 +674,16 @@ function CanvasContent() {
 
             <button
               onClick={handleSaveArtwork}
-              data-action="save"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              data-action="save"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span className="hidden md:inline">保存到库</span>
             </button>
             <button
               onClick={handleExportPNG}
-              data-action="export"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              data-action="export"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
             >
               <Download className="w-4 h-4" />
               <span className="hidden md:inline">导出 PNG</span>
@@ -674,7 +693,8 @@ function CanvasContent() {
                 canvasRef.current?.clear();
                 addToast("画布已清空", "warning");
               }}
-              data-action="clear"              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43] cursor-pointer"
+              data-action="clear"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43] cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden md:inline">清空画布</span>
@@ -741,7 +761,10 @@ function CanvasContent() {
             />
 
             {/* Voice Control Core Button Area */}
-            <div className="h-[96px] flex flex-col items-center justify-center relative" data-action="mic">
+            <div
+              className="h-[96px] flex flex-col items-center justify-center relative"
+              data-action="mic"
+            >
               <MicButton
                 state={micState}
                 onClick={handleMicTrigger}

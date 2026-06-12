@@ -9,7 +9,11 @@ const actionRegistry = new Map<
   { element: HTMLElement; label: string }
 >();
 
-export function registerAction(id: string, element: HTMLElement, label: string) {
+export function registerAction(
+  id: string,
+  element: HTMLElement,
+  label: string,
+) {
   actionRegistry.set(id, { element, label });
 }
 

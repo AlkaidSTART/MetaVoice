@@ -2,27 +2,29 @@
 
 @theme {
   /* Brand Pastel Colors */
-  --color-sakura: #FFB7C5;
-  --color-sakura-light: #FFE4EA;
-  --color-macaron-blue: #B5D5F5;
-  --color-macaron-blue-light: #E3F1FF;
-  --color-mint: #B5E8C7;
-  --color-mint-light: #E5F9EE;
-  --color-butter: #FFE5A0;
-  --color-butter-light: #FFF7D6;
-  --color-lavender: #D4C5F5;
-  
+  --color-sakura: #ffb7c5;
+  --color-sakura-light: #ffe4ea;
+  --color-macaron-blue: #b5d5f5;
+  --color-macaron-blue-light: #e3f1ff;
+  --color-mint: #b5e8c7;
+  --color-mint-light: #e5f9ee;
+  --color-butter: #ffe5a0;
+  --color-butter-light: #fff7d6;
+  --color-lavender: #d4c5f5;
+
   /* Neutral Palette */
-  --color-surface: #FAFAF8;
-  --color-border-custom: #E8E8E4;
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #6B6B6B;
-  --color-text-disabled: #AEAEAE;
+  --color-surface: #fafaf8;
+  --color-border-custom: #e8e8e4;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #6b6b6b;
+  --color-text-disabled: #aeaeae;
 
   /* Typography */
-  --font-sans: var(--font-inter), 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: var(--font-mono-custom), 'SF Mono', 'JetBrains Mono', monospace;
-  
+  --font-sans:
+    var(--font-inter), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif;
+  --font-mono: var(--font-mono-custom), "SF Mono", "JetBrains Mono", monospace;
+
   /* Layout constraints */
   --header-height: 56px;
   --toolbar-height: 48px;
@@ -31,15 +33,15 @@
 
 /* Base resets & theme styles */
 :root {
-  --color-bg-base: #FFFFFF;
-  --color-text-base: #1A1A1A;
+  --color-bg-base: #ffffff;
+  --color-text-base: #1a1a1a;
   background-color: var(--color-bg-base);
   color: var(--color-text-base);
 }
 
 body {
-  background-color: #FAFAF8;
-  color: #1A1A1A;
+  background-color: #fafaf8;
+  color: #1a1a1a;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -48,12 +50,19 @@ body {
 }
 
 /* Ensure all root divs fill the screen */
-#__next, main, [data-root] {
+#__next,
+main,
+[data-root] {
   height: 100%;
 }
 
 /* Restore cursor for interactive elements inside CustomCursor area */
-button, a, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"]) {
+button,
+a,
+input,
+textarea,
+[role="button"],
+[tabindex]:not([tabindex="-1"]) {
   cursor: none;
 }
 
@@ -64,7 +73,7 @@ button, a, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"]) {
 
 /* WCAG 2.1 AA Focus Styles */
 :focus-visible {
-  outline: 3px solid #FFB7C5 !important;
+  outline: 3px solid #ffb7c5 !important;
   outline-offset: 3px !important;
   border-radius: inherit;
 }
@@ -85,12 +94,12 @@ button, a, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"]) {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #E8E8E4;
+  background: #e8e8e4;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #FFB7C5;
+  background: #ffb7c5;
 }
 
 /* Pulsating Animation for Mic recording state */
@@ -115,11 +124,13 @@ button, a, input, textarea, [role="button"], [tabindex]:not([tabindex="-1"]) {
 
 /* Cursor blinking for transcript bar */
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 .transcript-cursor::after {
-  content: '|';
-  color: #FFB7C5;
+  content: "|";
+  color: #ffb7c5;
   animation: blink 1s step-start infinite;
   font-weight: bold;
   margin-left: 2px;

@@ -88,10 +88,8 @@ Object.defineProperty(global, "webkitSpeechRecognition", {
 });
 
 // Mock HTMLCanvasElement.getContext
-HTMLCanvasElement.prototype.getContext = vi.fn() as unknown as (
-  contextId: string,
-  options?: unknown,
-) => CanvasRenderingContext2D | null;
+HTMLCanvasElement.prototype.getContext =
+  vi.fn() as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
 // Mock fetch
 global.fetch = vi.fn();

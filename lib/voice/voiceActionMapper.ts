@@ -14,6 +14,33 @@ type ActionEntry = {
 };
 
 /**
+ * Global page-level actions registered once in the layout.
+ * These work across ALL pages.
+ */
+const PAGE_ACTIONS: ActionEntry[] = [
+  { keywords: ["画板", "画布", "画画", "绘图", "创作"], selector: "[data-action='nav-canvas']", label: "画板" },
+  { keywords: ["广场", "社区", "作品集", "大家"], selector: "[data-action='nav-square']", label: "广场" },
+  { keywords: ["画廊", "作品库", "我的作品", "图库"], selector: "[data-action='nav-gallery']", label: "作品库" },
+  { keywords: ["登录", "注册", "登陆"], selector: "[data-action='nav-login']", label: "登录" },
+  { keywords: ["退出", "登出", "注销", "离开"], selector: "[data-action='nav-logout']", label: "退出" },
+  { keywords: ["返回", "后退", "上一页", "回去"], selector: "[data-action='nav-back']", label: "返回" },
+];
+
+/**
+ * Per-page action registries.
+ */
+const PAGE_ACTIONS_MAP: Record<string, ActionEntry[]> = {
+  canvas: [
+    { keywords: ["录音", "录制", "开始", "说话", "听"], selector: "[data-action='mic']", label: "录音" },
+    { keywords: ["撤销", "后退", "取消"], selector: "[data-action='undo']", label: "撤销" },
+    { keywords: ["重做", "前进", "恢复"], selector: "[data-action='redo']", label: "重做" },
+    { keywords: ["清空", "清除", "重新", "重置"], selector: "[data-action='clear']", label: "清空" },
+    { keywords: ["保存", "存"], selector: "[data-action='save']", label: "保存" },
+    { keywords: ["导出", "下载"], selector: "[data-action='export']", label: "导出" },
+  ],
+};
+
+/**
  * Canvas page actions registry.
  * These are matched against voice transcript text.
  */
@@ -71,17 +98,30 @@ const CANVAS_ACTIONS: ActionEntry[] = [
 
 /**
  * Match a voice transcript against known UI actions.
- * Returns the matching ActionEntry and its matched keyword, or null.
+ * First checks global page actions, then page-specific actions.
  */
 export function matchVoiceToAction(
   transcript: string,
+  pageName?: string,
 ): { action: ActionEntry; matchedKeyword: string } | null {
   const lower = transcript.toLowerCase();
 
-  for (const action of CANVAS_ACTIONS) {
+  // 1. Try global page actions
+  for (const action of PAGE_ACTIONS) {
     for (const kw of action.keywords) {
       if (lower.includes(kw)) {
         return { action, matchedKeyword: kw };
+      }
+    }
+  }
+
+  // 2. Try page-specific actions
+  if (pageName && PAGE_ACTIONS_MAP[pageName]) {
+    for (const action of PAGE_ACTIONS_MAP[pageName]) {
+      for (const kw of action.keywords) {
+        if (lower.includes(kw)) {
+          return { action, matchedKeyword: kw };
+        }
       }
     }
   }

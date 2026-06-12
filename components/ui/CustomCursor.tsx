@@ -62,7 +62,7 @@ export default function CustomCursor() {
   const cursorRef = useRef<HTMLDivElement>(null);
   const pos = useRef({ x: 0, y: 0 });
 
-  // Track mouse
+  // Track mouse — 平滑跟随，过渡时间适中
   useEffect(() => {
     const move = (e: MouseEvent) => {
       pos.current = { x: e.clientX, y: e.clientY };
@@ -70,7 +70,7 @@ export default function CustomCursor() {
         gsap.to(cursorRef.current, {
           x: e.clientX,
           y: e.clientY,
-          duration: 0.15,
+          duration: 0.25,
           ease: "power2.out",
         });
       }
@@ -93,28 +93,28 @@ export default function CustomCursor() {
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
 
-      // Animate cursor to element center
+      // Animate cursor to element center — 飞行效果
       gsap.to(cursorRef.current, {
         x: cx,
         y: cy,
-        duration: 0.5,
-        ease: "back.out(1.7)",
+        duration: 0.9,
+        ease: "back.out(2.5)",
         onComplete: () => {
           // Click flash effect
           if (cursorRef.current) {
             gsap.fromTo(
               cursorRef.current,
-              { scale: 1.4, opacity: 0.9 },
+              { scale: 1.5, opacity: 1 },
               {
-                scale: 0.8,
+                scale: 0.7,
                 opacity: 0.5,
-                duration: 0.2,
+                duration: 0.35,
                 ease: "power2.out",
                 onComplete: () => {
                   gsap.to(cursorRef.current, {
                     scale: 1,
-                    opacity: 0.7,
-                    duration: 0.15,
+                    opacity: 0.75,
+                    duration: 0.25,
                   });
                   onClick?.();
                 },

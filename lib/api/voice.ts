@@ -22,6 +22,26 @@ export async function analyzeIntent(transcript: string) {
   return parseJson<IntentResult & { warning?: string }>(response);
 }
 
+export async function transcribeVoiceAudio(audio: Blob, mimeType?: string) {
+  const formData = new FormData();
+  const extension = mimeType?.includes("wav")
+    ? "wav"
+    : mimeType?.includes("mp3")
+      ? "mp3"
+      : "webm";
+
+  formData.set("audio", new File([audio], `voice-input.${extension}`, { type: mimeType || audio.type || "audio/webm" }));
+
+  const response = await fetch("/api/voice/transcribe", {
+    method: "POST",
+    body: formData,
+  });
+
+  return parseJson<{ transcript: string; duration?: number; warning?: string }>(
+    response,
+  );
+}
+
 export async function generateImage(prompt: string) {
   const response = await fetch("/api/image/generate", {
     method: "POST",

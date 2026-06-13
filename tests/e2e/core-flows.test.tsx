@@ -230,22 +230,14 @@ describe("VoiceRecognitionManager", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates and starts SpeechRecognition", () => {
-    const onResult = vi.fn();
-    const onError = vi.fn();
-    const onEnd = vi.fn();
-
-    const manager = new VoiceRecognitionManager(onResult, onError, onEnd);
-    manager.start();
-
-    expect(onResult).not.toHaveBeenCalled();
-    expect(onError).not.toHaveBeenCalled();
-    expect(onEnd).not.toHaveBeenCalled();
+  it("supports MediaRecorder-based voice capture", () => {
+    const manager = new VoiceRecognitionManager(vi.fn(), vi.fn(), vi.fn());
+    expect(manager.isSupported()).toBe(true);
   });
 
   it("stops recognition when stop is called", () => {
     const manager = new VoiceRecognitionManager(vi.fn(), vi.fn(), vi.fn());
-    manager.start();
+    void manager.start();
     manager.stop();
   });
 });
@@ -265,7 +257,7 @@ describe("API: POST /api/voice/transcribe", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 
-  it("returns mock transcript when DASHSCOPE_API_KEY is not set", async () => {
+  it("returns mock transcript when FUNASR_API_URL is not set", async () => {
     // Create FormData with a fake audio file
     const blob = new Blob(["fake audio data"], { type: "audio/webm" });
     const file = new File([blob], "test.webm", { type: "audio/webm" });
@@ -281,7 +273,7 @@ describe("API: POST /api/voice/transcribe", () => {
     // In test environment, may fail or succeed depending on runtime support
     if (res.ok) {
       expect(body.transcript).toBeTruthy();
-      expect(body.warning).toContain("DASHSCOPE_API_KEY");
+      expect(body.warning).toContain("FUNASR_API_URL");
     } else {
       expect(body.error).toBeTruthy();
     }

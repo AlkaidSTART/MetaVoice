@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashScopeApiKey } from "@/lib/api/config";
-import { transcribeAudioFile } from "@/lib/dashscope/transcribe";
+import { getFunAsrApiUrl } from "@/lib/api/config";
+import { transcribeAudioFile } from "@/lib/funasr/transcribe";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,10 +11,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
 
-    if (!getDashScopeApiKey()) {
+    if (!getFunAsrApiUrl()) {
       return NextResponse.json({
         transcript: "画一个红色的圆形在中间",
-        warning: "DASHSCOPE_API_KEY environment variable is not defined. Falling back to local mock.",
+        warning: "FUNASR_API_URL environment variable is not defined. Falling back to local mock.",
       });
     }
 

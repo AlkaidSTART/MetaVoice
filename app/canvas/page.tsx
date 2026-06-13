@@ -38,7 +38,7 @@ import {
   executeAction,
 } from "@/lib/voice/voiceActionMapper";
 import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
-import { analyzeIntent, generateImage } from "@/lib/api/voice";
+import { analyzeIntent, generateImage, transcribeVoiceAudio } from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
 import canvasConfetti from "canvas-confetti";
 
@@ -345,14 +345,36 @@ function CanvasContent() {
     checkAuth();
   }, [artworkIdQuery, router]);
 
-  // 2. Initialize Voice Recognition Manager
+  // 2. Initialize voice recorder manager
   useEffect(() => {
+    voiceManagerRef.current?.destroy();
+
     const manager = new VoiceRecognitionManager(
-      // onResult
-      (text, isFinal) => {
-        setTranscript(text);
-        if (isFinal) {
+      // onDataReady
+      async ({ blob, mimeType }) => {
+        setIsRecording(false);
+        setIsProcessing(true);
+        setMicState("processing");
+
+        try {
+          const result = await transcribeVoiceAudio(blob, mimeType);
+          const text = result.transcript?.trim() || "";
+          setTranscript(text);
+
+          if (!text) {
+            addToast("未识别到有效语音内容，请再试一次。", "warning");
+            setIsProcessing(false);
+            setMicState("idle");
+            return;
+          }
+
           handleVoiceCommandComplete(text);
+        } catch (error) {
+          console.error("Speech Recognition Error:", error);
+          setIsProcessing(false);
+          setMicState("error");
+          addToast("语音识别失败，请检查识别服务后重试。", "error");
+          setTimeout(() => setMicState("idle"), 1200);
         }
       },
       // onError
@@ -375,9 +397,6 @@ function CanvasContent() {
       // onEnd
       () => {
         setIsRecording(false);
-        if (micState === "recording") {
-          setMicState("idle");
-        }
       },
     );
 
@@ -394,10 +413,10 @@ function CanvasContent() {
 
     return () => {
       if (voiceManagerRef.current) {
-        voiceManagerRef.current.stop();
+        voiceManagerRef.current.destroy();
       }
     };
-  }, [micState]);
+  }, []);
 
   // 5. Intent Modal callback
   const handleIntentResolution = (option: "canvas" | "ai_generate") => {
@@ -478,6 +497,8 @@ function CanvasContent() {
       setMicState("recording");
 
       if (voiceManagerRef.current) {
+        voiceManagerRef.current.destroy();
+
         if (
           typeof window !== "undefined" &&
           window.isSecureContext === false &&
@@ -491,7 +512,7 @@ function CanvasContent() {
           return;
         }
 
-        voiceManagerRef.current.start();
+        void voiceManagerRef.current.start();
       } else {
         // Fallback input box simulator for non-speech browsers (Safari on some platforms, tests, etc.)
         const simulatedText = prompt(

@@ -65,25 +65,41 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Mock SpeechRecognition
-class MockSpeechRecognition {
-  continuous = false;
-  interimResults = false;
-  lang = "zh-CN";
-  onresult: ((event: unknown) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onend: (() => void) | null = null;
-  start = vi.fn();
-  stop = vi.fn();
+class MockMediaRecorder {
+  static isTypeSupported = vi.fn(() => true);
+  mimeType = "audio/webm;codecs=opus";
+  state: "inactive" | "recording" = "inactive";
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  start = vi.fn(() => {
+    this.state = "recording";
+  });
+
+  stop = vi.fn(() => {
+    this.state = "inactive";
+    this.ondataavailable?.({
+      data: new Blob(["mock audio"], { type: this.mimeType }),
+    });
+    this.onstop?.();
+  });
 }
 
-Object.defineProperty(global, "SpeechRecognition", {
-  value: MockSpeechRecognition,
+Object.defineProperty(global, "MediaRecorder", {
+  value: MockMediaRecorder,
   writable: true,
 });
 
-Object.defineProperty(global, "webkitSpeechRecognition", {
-  value: MockSpeechRecognition,
+Object.defineProperty(global, "navigator", {
+  value: {
+    ...global.navigator,
+    mediaDevices: {
+      getUserMedia: vi.fn(async () => ({
+        getTracks: () => [{ stop: vi.fn() }],
+      })),
+    },
+  },
   writable: true,
 });
 

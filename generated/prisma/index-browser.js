@@ -124,6 +124,7 @@ exports.Prisma.ProfileScalarFieldEnum = {
   id: 'id',
   name: 'name',
   avatarUrl: 'avatarUrl',
+  credits: 'credits',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };

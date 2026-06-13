@@ -1,48 +1,42 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useTransition,
-  Suspense,
-} from "react";
+import React, { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Undo2,
-  Redo2,
-  Trash2,
-  Download,
-  Save,
-  Palette,
-  HelpCircle,
-  FolderHeart,
-  LogOut,
   ChevronRight,
-  Sparkles,
+  Download,
+  FolderHeart,
   Globe,
+  HelpCircle,
+  LogOut,
+  Palette,
+  Redo2,
+  Save,
+  Sparkles,
+  Trash2,
+  Undo2,
 } from "lucide-react";
-import { CanvasBoardRef } from "@/components/canvas/CanvasBoard";
-import CanvasBoard from "@/components/canvas/CanvasBoard";
+import canvasConfetti from "canvas-confetti";
+import CanvasBoard, { CanvasBoardRef } from "@/components/canvas/CanvasBoard";
 import MicButton, { MicState } from "@/components/voice/MicButton";
 import TranscriptBar from "@/components/voice/TranscriptBar";
 import IntentModal from "@/components/voice/IntentModal";
 import ToastContainer, { ToastMessage, ToastType } from "@/components/ui/Toast";
 import {
-  VoiceRecognitionManager,
   COLOR_NAME_MAP,
+  VoiceRecognitionManager,
   type IntentResult,
 } from "@/lib/voice/speechRecognition";
-import {
-  matchVoiceToAction,
-  executeAction,
-} from "@/lib/voice/voiceActionMapper";
+import { executeAction, matchVoiceToAction } from "@/lib/voice/voiceActionMapper";
 import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
-import { analyzeIntent, generateImage, transcribeVoiceAudio } from "@/lib/api/voice";
+import {
+  analyzeIntent,
+  fetchCredits,
+  generateImage,
+  transcribeVoiceAudio,
+} from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
-import canvasConfetti from "canvas-confetti";
 
-// User profile type used in the canvas page
 interface UserProfile {
   id: string;
   name: string;
@@ -51,68 +45,83 @@ interface UserProfile {
   isLoggedIn: boolean;
 }
 
+type FlowStage =
+  | ""
+  | "正在录音"
+  | "正在识别语音"
+  | "正在解析指令"
+  | "正在绘制草图"
+  | "正在自动保存 PNG"
+  | "等待高级生成"
+  | "正在生成高级图片";
+
 function CanvasContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const artworkIdQuery = searchParams.get("id");
   const [isPending, startTransition] = useTransition();
 
-  // State managers
   const [user, setUser] = useState<UserProfile | null>(null);
   const [artworkId, setArtworkId] = useState<string | null>(null);
-  const [artworkTitle, setArtworkTitle] = useState<string>("未命名画作");
-  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
-
+  const [artworkTitle, setArtworkTitle] = useState("未命名画作");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [micState, setMicState] = useState<MicState>("idle");
-  const [transcript, setTranscript] = useState<string>("");
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-
-  // Layout states
+  const [transcript, setTranscript] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [flowStage, setFlowStage] = useState<FlowStage>("");
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [isIntentModalOpen, setIsIntentModalOpen] = useState(false);
   const [currentIntent, setCurrentIntent] = useState<IntentResult | null>(null);
-  const [isIntentModalOpen, setIsIntentModalOpen] = useState<boolean>(false);
-  const [canUndo, setCanUndo] = useState<boolean>(false);
-  const [canRedo, setCanRedo] = useState<boolean>(false);
-  const [currentColor, setCurrentColor] = useState<string>("#B5D5F5"); // default blue
-  const [currentColorName, setCurrentColorName] = useState<string>("蓝色");
-  const [canvasMode, setCanvasMode] = useState<"canvas" | "ai_generate">(
-    "canvas",
-  );
+  const [pendingImageSource, setPendingImageSource] = useState("");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [currentColor, setCurrentColor] = useState("#1A1A1A");
+  const [currentColorName, setCurrentColorName] = useState("默认描边");
+  const [canvasMode, setCanvasMode] = useState<"canvas" | "ai_generate">("canvas");
+  const [credits, setCredits] = useState(0);
 
-  // References
   const canvasRef = useRef<CanvasBoardRef>(null);
   const voiceManagerRef = useRef<VoiceRecognitionManager | null>(null);
 
-  // Toast emitter helper
   const addToast = (message: string, type: ToastType = "info") => {
-    const id = "toast_" + Math.random().toString(36).substring(2, 9);
+    const id = `toast_${Math.random().toString(36).slice(2, 9)}`;
     setToasts((prev) => [...prev, { id, type, message }]);
   };
 
   const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
   };
 
-  function translateShapeName(shape: string) {
-    return (
-      {
-        circle: "圆形",
-        rect: "方形",
-        line: "直线",
-        triangle: "三角形",
-        star: "五角星",
-      }[shape] || shape
-    );
-  }
+  const setIdleState = () => {
+    setIsProcessing(false);
+    setFlowStage("");
+    setMicState("idle");
+  };
 
-  async function handleSaveArtwork() {
-    if (!canvasRef.current) return;
-    const shapesData = canvasRef.current.getShapesData();
-    if (shapesData.length === 0) {
-      addToast("当前画布为空，没有内容可以保存。", "warning");
-      return;
+  const refreshCredits = async () => {
+    try {
+      const result = await fetchCredits();
+      setCredits(result.credits);
+    } catch (error) {
+      console.error(error);
     }
+  };
+
+  const translateShapeName = (shape: string) =>
+    ({
+      circle: "圆形",
+      rect: "方形",
+      line: "直线",
+      triangle: "三角形",
+      star: "五角星",
+      text: "文字",
+    })[shape] || shape;
+
+  const saveCurrentArtwork = async (showToast = false) => {
+    if (!canvasRef.current) return null;
+    const shapesData = canvasRef.current.getShapesData();
+    if (!shapesData.length) return null;
 
     const dataUrl = canvasRef.current.exportImage();
     const response = await saveArtworkViaApi({
@@ -120,29 +129,28 @@ function CanvasContent() {
       title: artworkTitle,
       canvasJson: JSON.stringify(shapesData),
       thumbnailDataUrl: dataUrl,
-      tags: ["Canvas"],
+      tags: [canvasMode === "ai_generate" ? "AI" : "Canvas"],
       isPublic: true,
     });
+
     if (response?.artwork) {
       setArtworkId(response.artwork.id);
+      if (showToast) {
+        addToast(`作品 "${artworkTitle}" 保存成功！`, "success");
+      }
     }
 
-    canvasConfetti({
-      particleCount: 60,
-      spread: 50,
-      colors: ["#FFB7C5", "#B5D5F5", "#B5E8C7", "#FFE5A0"],
-    });
+    return dataUrl;
+  };
 
-    addToast(`作品 "${artworkTitle}" 保存成功！已同步到广场`, "success");
-  }
-
-  async function handleExportPNG() {
+  const handleExportPNG = async () => {
     if (!canvasRef.current) return;
     const dataUrl = canvasRef.current.exportImage();
     if (!dataUrl) {
       addToast("导出失败", "error");
       return;
     }
+
     const link = document.createElement("a");
     link.href = dataUrl;
     link.download = `${artworkTitle || "voicecanvas_artwork"}.png`;
@@ -150,382 +158,332 @@ function CanvasContent() {
     link.click();
     document.body.removeChild(link);
     addToast("作品已下载到本地！", "success");
+  };
 
-    try {
-      const blob = await (await fetch(dataUrl)).blob();
-      const formData = new FormData();
-      formData.append(
-        "file",
-        blob,
-        `${artworkTitle || "voicecanvas_artwork"}.png`,
-      );
+  const applyIntentToCanvas = async (intent: IntentResult) => {
+    if (!canvasRef.current) return;
 
-      const response = await fetch("/api/storage/upload", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-      const body = await response.json();
-
-      if (!response.ok) {
-        throw new Error(body?.error || "Upload failed");
-      }
-
-      addToast("导出图片已自动上传到 voice bucket。", "success");
-    } catch (error) {
-      console.error(error);
-      addToast("本地导出成功，但上传 bucket 失败。", "warning");
-    }
-  }
-
-  function executeIntent(intent: IntentResult) {
-    const { type, canvasOp } = intent;
-
-    if (!canvasOp) {
-      setCurrentIntent(intent);
-      setIsIntentModalOpen(true);
-      setMicState("idle");
+    if (intent.type === "ai_generate") {
+      await canvasRef.current.createSceneSketch(intent.imagePrompt || intent.transcript);
+      addToast("已先生成 Canvas 草图", "success");
       return;
     }
 
-    if (type === "control") {
-      const action = canvasOp.action;
-      if (action === "undo") {
-        canvasRef.current?.undo();
-        addToast("已撤销上一步操作", "info");
-      } else if (action === "redo") {
-        canvasRef.current?.redo();
-        addToast("已重做上一步操作", "info");
-      } else if (action === "clear") {
-        canvasRef.current?.clear();
-        addToast("画布已清空", "warning");
-      } else if (action === "save") {
-        handleSaveArtwork();
-      } else if (action === "export") {
-        handleExportPNG();
-      }
-
-      setMicState("success");
-      setTimeout(() => setMicState("idle"), 1000);
+    if (intent.type !== "canvas" || !intent.canvasOp) {
       return;
     }
 
-    if (type === "canvas") {
-      const {
-        action,
+    const { action, shape, color, colorName, position, size, text, fill } = intent.canvasOp;
+
+    if (action === "draw" && shape) {
+      await canvasRef.current.addShape(
         shape,
         color,
-        colorName,
-        position,
-        size,
-        text: textDetail,
-      } = canvasOp;
-
-      if (action === "draw" && shape) {
-        canvasRef.current?.addShape(
-          shape,
-          color || "#B5D5F5",
-          position?.anchor || "center",
-          size?.scale || "medium",
-        );
-
-        if (color) {
-          setCurrentColor(color);
-          setCurrentColorName(colorName || COLOR_NAME_MAP[color] || "自定义");
-        }
-        setCanvasMode("canvas");
-        addToast(
-          `成功绘制了一个${colorName || ""}${translateShapeName(shape)}`,
-          "success",
-        );
-      } else if (action === "text" && textDetail) {
-        canvasRef.current?.addShape(
-          "text",
-          color || "#1A1A1A",
-          position?.anchor || "center",
-          "medium",
-          textDetail,
-        );
-        addToast(`成功写入文字: "${textDetail}"`, "success");
+        position?.anchor || "center",
+        size?.scale || "medium",
+        undefined,
+        {
+          fill: fill ?? false,
+          pixelSize: size?.width || size?.radius,
+        },
+      );
+      if (color) {
+        setCurrentColor(color);
+        setCurrentColorName(colorName || COLOR_NAME_MAP[color] || "自定义");
+      } else {
+        setCurrentColor("#1A1A1A");
+        setCurrentColorName("默认描边");
       }
-
-      setMicState("success");
-      setTimeout(() => setMicState("idle"), 1000);
+      addToast(`已绘制${colorName || ""}${translateShapeName(shape)}`, "success");
       return;
     }
 
-    setCurrentIntent(intent);
-    setIsIntentModalOpen(true);
-    setMicState("idle");
-  }
+    if (action === "text" && text) {
+      await canvasRef.current.addShape(
+        "text",
+        color || "#1A1A1A",
+        position?.anchor || "center",
+        "medium",
+        text,
+        { fill: true },
+      );
+      addToast(`已写入文字 "${text}"`, "success");
+    }
+  };
 
-  function handleVoiceCommandComplete(text: string) {
+  const handleControlIntent = async (intent: IntentResult) => {
+    const action = intent.canvasOp?.action;
+    if (!action) return;
+
+    if (action === "undo") {
+      canvasRef.current?.undo();
+      addToast("已撤销上一步操作", "info");
+    } else if (action === "redo") {
+      canvasRef.current?.redo();
+      addToast("已重做上一步操作", "info");
+    } else if (action === "clear") {
+      canvasRef.current?.clear();
+      addToast("画布已清空", "warning");
+    } else if (action === "save") {
+      await saveCurrentArtwork(true);
+    } else if (action === "export") {
+      await handleExportPNG();
+    }
+  };
+
+  const processTranscript = async (text: string) => {
     if (!text.trim()) {
-      setIsRecording(false);
-      setMicState("idle");
+      setIdleState();
       return;
     }
 
-    // Check if the command matches a UI navigation/action first
     const matched = matchVoiceToAction(text);
     if (matched) {
-      setIsRecording(false);
       setMicState("success");
       executeAction(matched.action);
-      setTimeout(() => setMicState("idle"), 1000);
+      setTimeout(() => setMicState("idle"), 800);
+      setIsProcessing(false);
+      setFlowStage("");
       return;
     }
 
-    setIsRecording(false);
-    setIsProcessing(true);
-    setMicState("processing");
+    try {
+      setFlowStage("正在解析指令");
+      const intent = await analyzeIntent(text);
+      setCurrentIntent(intent);
 
-    setTimeout(async () => {
-      try {
-        const intent = await analyzeIntent(text);
+      if (intent.type === "control" && intent.canvasOp) {
+        await handleControlIntent(intent);
+        setMicState("success");
         setIsProcessing(false);
-
-        if (intent.confidence >= 0.8 && intent.type !== "ambiguous") {
-          executeIntent(intent);
-        } else {
-          setCurrentIntent(intent);
-          setMicState("idle");
-          setIsIntentModalOpen(true);
-        }
-      } catch (error) {
-        console.error(error);
-        setIsProcessing(false);
-        setMicState("error");
-        addToast("语音指令解析失败，请再试一次。", "error");
-        setTimeout(() => setMicState("idle"), 1200);
-      }
-    }, 700);
-  }
-
-  // 1. Initial configuration: check login and query param
-  useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
+        setFlowStage("");
+        setTimeout(() => setMicState("idle"), 800);
         return;
       }
-      setUser({
-        id: user.id,
-        name: user.user_metadata?.name || user.email?.split("@")[0] || "用户",
-        email: user.email || "",
-        avatarUrl: user.user_metadata?.avatar_url,
-        isLoggedIn: true,
-      });
 
-      if (artworkIdQuery) {
-        const { artwork: art } = await fetchArtwork(artworkIdQuery);
-        if (art) {
-          setArtworkId(art.id);
-          setArtworkTitle(art.title || "未命名画作");
-          setTimeout(() => {
-            if (canvasRef.current && art.canvas_json) {
-              try {
-                canvasRef.current.setShapesData(JSON.parse(art.canvas_json));
-                addToast("作品加载成功！", "success");
-              } catch (e) {
-                console.error(e);
-                addToast("解析作品数据失败", "error");
-              }
-            }
-          }, 100);
-        }
+      setFlowStage("正在绘制草图");
+      await applyIntentToCanvas(intent);
+      setCanvasMode("canvas");
+
+      setFlowStage("正在自动保存 PNG");
+      const dataUrl = await saveCurrentArtwork(false);
+      if (!dataUrl) {
+        throw new Error("Auto-save failed");
       }
-    };
 
-    checkAuth();
-  }, [artworkIdQuery, router]);
+      setPendingImageSource(dataUrl);
+      setIsIntentModalOpen(true);
+      setFlowStage("等待高级生成");
+      setMicState("success");
+      setIsProcessing(false);
+      setTimeout(() => setMicState("idle"), 800);
+    } catch (error) {
+      console.error(error);
+      setMicState("error");
+      setIsProcessing(false);
+      setFlowStage("");
+      addToast("语音指令处理失败，请再试一次。", "error");
+      setTimeout(() => setMicState("idle"), 1200);
+    }
+  };
 
-  // 2. Initialize voice recorder manager
-  useEffect(() => {
-    voiceManagerRef.current?.destroy();
-
-    const manager = new VoiceRecognitionManager(
-      // onDataReady
+  const createVoiceManager = () =>
+    new VoiceRecognitionManager(
       async ({ blob, mimeType }) => {
         setIsRecording(false);
         setIsProcessing(true);
         setMicState("processing");
+        setFlowStage("正在识别语音");
 
         try {
           const result = await transcribeVoiceAudio(blob, mimeType);
           const text = result.transcript?.trim() || "";
+          if (typeof result.credits === "number") {
+            setCredits(result.credits);
+          }
           setTranscript(text);
 
           if (!text) {
             addToast("未识别到有效语音内容，请再试一次。", "warning");
-            setIsProcessing(false);
-            setMicState("idle");
+            setIdleState();
             return;
           }
 
-          handleVoiceCommandComplete(text);
+          await processTranscript(text);
         } catch (error) {
           console.error("Speech Recognition Error:", error);
-          setIsProcessing(false);
+          const message = error instanceof Error ? error.message : "";
           setMicState("error");
-          addToast("语音识别失败，请检查识别服务后重试。", "error");
+          setIsProcessing(false);
+          setFlowStage("");
+          addToast(message.includes("积分不足") ? "积分不足" : "语音识别失败，请重试。", "error");
           setTimeout(() => setMicState("idle"), 1200);
+          await refreshCredits();
         }
       },
-      // onError
       (err) => {
-        const normalizedError = VoiceRecognitionManager.normalizeError(err);
-        console.error("Speech Recognition Error:", normalizedError, err);
-        if (normalizedError.error === "not-allowed") {
-          addToast("麦克风权限被拒绝，请在浏览器设置中开启后重试。", "error");
-        } else if (normalizedError.error === "service-not-allowed") {
-          addToast("当前浏览器或页面环境不允许语音识别，请改用 HTTPS 或 Chrome。", "error");
-        } else if (normalizedError.error === "network") {
-          addToast("语音识别网络异常，请检查网络后重试。", "warning");
-        } else {
-          addToast("语音输入遇到问题，请重新录制。", "warning");
-        }
+        const normalized = VoiceRecognitionManager.normalizeError(err);
+        console.error("Speech Recognition Error:", normalized, err);
         setIsRecording(false);
         setMicState("error");
+        setFlowStage("");
+        addToast("语音输入遇到问题，请重新录制。", "warning");
         setTimeout(() => setMicState("idle"), 1200);
       },
-      // onEnd
       () => {
         setIsRecording(false);
       },
     );
 
-    if (manager.isSupported()) {
-      voiceManagerRef.current = manager;
-    } else {
-      setTimeout(() => {
-        addToast(
-          "您的浏览器不支持原生语音识别，已激活模拟命令输入栏。",
-          "info",
-        );
-      }, 0);
-    }
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient();
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-    return () => {
-      if (voiceManagerRef.current) {
-        voiceManagerRef.current.destroy();
+      if (!authUser) {
+        router.push("/login");
+        return;
+      }
+
+      setUser({
+        id: authUser.id,
+        name: authUser.user_metadata?.name || authUser.email?.split("@")[0] || "用户",
+        email: authUser.email || "",
+        avatarUrl: authUser.user_metadata?.avatar_url,
+        isLoggedIn: true,
+      });
+
+      await refreshCredits();
+
+      if (artworkIdQuery) {
+        const { artwork } = await fetchArtwork(artworkIdQuery);
+        if (artwork?.canvas_json && canvasRef.current) {
+          setArtworkId(artwork.id);
+          setArtworkTitle(artwork.title || "未命名画作");
+          canvasRef.current.setShapesData(JSON.parse(artwork.canvas_json));
+        }
       }
     };
+
+    void checkAuth();
+  }, [artworkIdQuery, router]);
+
+  useEffect(() => {
+    voiceManagerRef.current?.destroy();
+    const manager = createVoiceManager();
+    if (manager.isSupported()) {
+      voiceManagerRef.current = manager;
+    }
+    return () => {
+      voiceManagerRef.current?.destroy();
+    };
+    // createVoiceManager intentionally closes over the latest state setters.
   }, []);
 
-  // 5. Intent Modal callback
-  const handleIntentResolution = (option: "canvas" | "ai_generate") => {
-    setIsIntentModalOpen(false);
+  const handleAdvancedGenerate = async () => {
+    if (!currentIntent || !pendingImageSource) return;
+    if (credits < 1) {
+      addToast("积分不足", "error");
+      return;
+    }
 
-    if (!currentIntent) return;
+    try {
+      setIsIntentModalOpen(false);
+      setIsProcessing(true);
+      setMicState("processing");
+      setFlowStage("正在生成高级图片");
 
-    if (option === "canvas") {
-      // Fallback: draw a star or shape from transcript
-      const text = currentIntent.transcript;
-      let shape: "star" | "circle" | "rect" = "circle";
-      if (text.includes("星")) shape = "star";
-      else if (text.includes("方") || text.includes("矩")) shape = "rect";
-
-      canvasRef.current?.addShape(shape, currentColor, "center", "medium");
-      addToast(
-        `成功绘制了一个${currentColorName}${translateShapeName(shape)}`,
-        "success",
+      const result = await generateImage(
+        currentIntent.imagePrompt || currentIntent.transcript,
+        pendingImageSource,
       );
 
+      if (typeof result.credits === "number") {
+        setCredits(result.credits);
+      }
+
+      const finalImageUrl = result.storageUrl || result.imageUrl;
+      await canvasRef.current?.addShape("image", "#FFFFFF", "center", "large", finalImageUrl);
+      setCanvasMode("ai_generate");
+      await saveCurrentArtwork(false);
+
+      canvasConfetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.7 },
+      });
+
+      addToast("高级图片生成成功", "success");
       setMicState("success");
+      setIsProcessing(false);
+      setFlowStage("");
       setTimeout(() => setMicState("idle"), 1000);
-    } else if (option === "ai_generate") {
-      addToast("AI 生图排队中，正在合成场景图像...", "info");
-      setMicState("processing");
-      setIsProcessing(true);
-
-      const promptKeyword =
-        currentIntent.imagePrompt ||
-        currentIntent.transcript ||
-        "beautiful pastel art";
-
-      generateImage(promptKeyword)
-        .then(async (result) => {
-          const finalImageUrl = result.storageUrl || result.imageUrl;
-
-          canvasRef.current?.addShape(
-            "image",
-            "#ffffff",
-            "center",
-            "large",
-            finalImageUrl,
-          );
-
-          setIsProcessing(false);
-          setMicState("success");
-          setCanvasMode("ai_generate");
-
-          canvasConfetti({
-            particleCount: 80,
-            spread: 60,
-            origin: { y: 0.7 },
-          });
-
-          addToast("AI 场景生成并载入画布成功！", "success");
-          setTimeout(() => setMicState("idle"), 1200);
-        })
-        .catch((error) => {
-          console.error(error);
-          setIsProcessing(false);
-          setMicState("error");
-          addToast("AI 生图失败，请重试。", "error");
-          setTimeout(() => setMicState("idle"), 1200);
-        });
+    } catch (error) {
+      console.error(error);
+      setMicState("error");
+      setIsProcessing(false);
+      setFlowStage("");
+      addToast("高级图片生成失败", "error");
+      setTimeout(() => setMicState("idle"), 1200);
+      await refreshCredits();
     }
   };
 
-  // Trigger recording
-  const handleMicTrigger = () => {
+  const handleMicTrigger = async () => {
+    if (credits < 1) {
+      addToast("积分不足", "error");
+      return;
+    }
+
     if (isRecording) {
-      // Stop recording and process
-      setIsRecording(false);
       voiceManagerRef.current?.stop();
+      return;
+    }
+
+    setTranscript("");
+    setFlowStage("正在录音");
+    setIsRecording(true);
+    setMicState("recording");
+
+    if (
+      typeof window !== "undefined" &&
+      window.isSecureContext === false &&
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1"
+    ) {
+      addToast("语音识别需要在 HTTPS 或 localhost 环境中使用。", "error");
+      setIsRecording(false);
+      setMicState("error");
+      setFlowStage("");
+      setTimeout(() => setMicState("idle"), 1200);
+      return;
+    }
+
+    voiceManagerRef.current?.destroy();
+    const freshManager = createVoiceManager();
+    voiceManagerRef.current = freshManager;
+
+    if (freshManager.isSupported()) {
+      await freshManager.start();
+      return;
+    }
+
+    const simulatedText = prompt(
+      "请输入你想执行的绘画指令（语音模拟）",
+    );
+    if (simulatedText) {
+      setTranscript(simulatedText);
+      setIsRecording(false);
+      setIsProcessing(true);
+      setMicState("processing");
+      setFlowStage("正在识别语音");
+      await processTranscript(simulatedText);
     } else {
-      // Start recording
-      setTranscript("");
-      setIsRecording(true);
-      setMicState("recording");
-
-      if (voiceManagerRef.current) {
-        voiceManagerRef.current.destroy();
-
-        if (
-          typeof window !== "undefined" &&
-          window.isSecureContext === false &&
-          window.location.hostname !== "localhost" &&
-          window.location.hostname !== "127.0.0.1"
-        ) {
-          addToast("语音识别需要在 HTTPS 或 localhost 环境中使用。", "error");
-          setIsRecording(false);
-          setMicState("error");
-          setTimeout(() => setMicState("idle"), 1200);
-          return;
-        }
-
-        void voiceManagerRef.current.start();
-      } else {
-        // Fallback input box simulator for non-speech browsers (Safari on some platforms, tests, etc.)
-        const simulatedText = prompt(
-          "请输入你想执行的绘画指令（语音模拟）：\n例如: '在中间画一个红色的圆形', '画一个黄色的五角星在左边', '撤销', '保存'",
-        );
-        if (simulatedText) {
-          setTranscript(simulatedText);
-          handleVoiceCommandComplete(simulatedText);
-        } else {
-          setIsRecording(false);
-          setMicState("idle");
-        }
-      }
+      setIsRecording(false);
+      setMicState("idle");
+      setFlowStage("");
     }
   };
 
@@ -543,24 +501,21 @@ function CanvasContent() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#FAFAF8] font-sans h-screen select-none overflow-hidden relative">
-      {/* Toast Manager */}
+    <div className="flex-1 flex flex-col bg-surface font-sans h-screen select-none overflow-hidden relative">
       <ToastContainer toasts={toasts} onClose={removeToast} />
 
-      {/* Disambiguation Modal */}
       <IntentModal
         isOpen={isIntentModalOpen}
         transcript={transcript}
-        onSelect={handleIntentResolution}
+        credits={credits}
+        onConfirm={handleAdvancedGenerate}
         onClose={() => {
           setIsIntentModalOpen(false);
-          setTranscript("");
+          setFlowStage("");
         }}
       />
 
-      {/* Header */}
       <header className="h-[56px] bg-white border-b border-border-custom px-4 flex items-center justify-between z-30 shadow-sm">
-        {/* Left: Brand Logo & back button */}
         <div className="flex items-center gap-3">
           <span
             className="text-base font-black text-text-primary tracking-tight cursor-pointer"
@@ -571,14 +526,13 @@ function CanvasContent() {
           </span>
           <div className="h-4 w-px bg-border-custom" />
 
-          {/* Editable Title */}
           {isEditingTitle ? (
             <input
               type="text"
               value={artworkTitle}
-              onChange={(e) => setArtworkTitle(e.target.value)}
+              onChange={(event) => setArtworkTitle(event.target.value)}
               onBlur={handleTitleBlur}
-              onKeyDown={(e) => e.key === "Enter" && handleTitleBlur()}
+              onKeyDown={(event) => event.key === "Enter" && handleTitleBlur()}
               className="text-sm font-bold text-text-primary bg-surface border border-sakura rounded px-2 py-0.5 max-w-[150px] outline-none"
               autoFocus
             />
@@ -586,15 +540,18 @@ function CanvasContent() {
             <button
               onClick={() => setIsEditingTitle(true)}
               className="text-sm font-bold text-text-primary hover:text-sakura border border-transparent hover:border-border-custom hover:bg-surface rounded px-2 py-0.5 transition-colors cursor-pointer"
-              title="双击或点击重命名"
             >
               {artworkTitle}
             </button>
           )}
         </div>
 
-        {/* Right: Actions & User */}
         <div className="flex items-center gap-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-butter bg-butter-light text-xs font-bold text-text-primary">
+            <span>积分 {credits}</span>
+            <span className="text-text-secondary">语音 -1 / 高清 -1</span>
+          </div>
+
           <button
             onClick={() => startTransition(() => router.push("/square"))}
             disabled={isPending}
@@ -613,16 +570,11 @@ function CanvasContent() {
             <FolderHeart className="w-3.5 h-3.5" />
             <span>我的作品库</span>
           </button>
-
           <div className="h-4 w-px bg-border-custom" />
-
           {user && (
             <div className="flex items-center gap-2">
               <img
-                src={
-                  user.avatarUrl ||
-                  "https://api.dicebear.com/7.x/adventurer/svg"
-                }
+                src={user.avatarUrl || "https://api.dicebear.com/7.x/adventurer/svg"}
                 alt="Avatar"
                 className="w-8 h-8 rounded-full border border-sakura bg-sakura-light"
               />
@@ -639,19 +591,16 @@ function CanvasContent() {
         </div>
       </header>
 
-      {/* Main workspace section */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        {/* Left Side: Drawing Tool Status Panel */}
-        <aside className="w-full md:w-56 bg-white border-r border-border-custom flex md:flex-col justify-between p-4 gap-4 z-10 shrink-0 shadow-inner">
-          {/* Tool status */}
+        <aside className="w-full md:w-64 bg-white border-r border-border-custom flex md:flex-col justify-between p-4 gap-4 z-10 shrink-0 shadow-inner">
           <div className="flex flex-row md:flex-col gap-4 w-full justify-between md:justify-start">
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold text-text-disabled uppercase tracking-wider">
-                当前画笔颜色
+                当前画笔
               </span>
-              <div className="flex items-center gap-2 bg-[#FAFAF8] border border-border-custom/40 rounded-xl p-2">
+              <div className="flex items-center gap-2 bg-surface border border-border-custom/40 rounded-xl p-2">
                 <div
-                  className="w-5 h-5 rounded-md border border-black/10 transition-colors duration-300"
+                  className="w-5 h-5 rounded-md border border-black/10"
                   style={{ backgroundColor: currentColor }}
                 />
                 <span className="text-xs font-bold text-text-primary">
@@ -676,36 +625,36 @@ function CanvasContent() {
                 ) : (
                   <Sparkles className="w-3.5 h-3.5" />
                 )}
-                <span>
-                  {canvasMode === "canvas" ? "几何绘图" : "AI 智能场景"}
-                </span>
+                <span>{canvasMode === "canvas" ? "Canvas 草图" : "高级图片"}</span>
               </span>
             </div>
           </div>
 
-          {/* Quick buttons */}
-          <div className="flex gap-2 items-center md:flex-col md:items-stretch">
+          <div className="flex flex-col gap-2">
+            <div className="rounded-xl border border-border-custom/50 bg-surface p-3">
+              <p className="text-[11px] font-bold text-text-disabled uppercase tracking-wider">
+                当前流程
+              </p>
+              <p className="mt-1 text-xs font-medium text-text-primary">
+                {"录音 -> Fun-ASR -> Qwen3.7-Max -> Canvas -> 自动保存 -> 高级生成可选"}
+              </p>
+            </div>
+
             <div className="flex gap-1">
               <button
-                onClick={() => {
-                  canvasRef.current?.undo();
-                  addToast("撤销操作", "info");
-                }}
+                onClick={() => canvasRef.current?.undo()}
                 disabled={!canUndo}
                 data-action="undo"
-                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30"
                 title="撤销"
               >
                 <Undo2 className="w-4 h-4" />
               </button>
               <button
-                onClick={() => {
-                  canvasRef.current?.redo();
-                  addToast("重做操作", "info");
-                }}
+                onClick={() => canvasRef.current?.redo()}
                 disabled={!canRedo}
                 data-action="redo"
-                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30 disabled:hover:border-border-custom disabled:hover:bg-white cursor-pointer"
+                className="flex-1 p-2 bg-white hover:bg-surface border border-border-custom hover:border-sakura rounded-xl flex justify-center text-text-secondary disabled:opacity-30"
                 title="重做"
               >
                 <Redo2 className="w-4 h-4" />
@@ -713,20 +662,20 @@ function CanvasContent() {
             </div>
 
             <button
-              onClick={handleSaveArtwork}
+              onClick={() => void saveCurrentArtwork(true)}
               data-action="save"
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface"
             >
               <Save className="w-4 h-4" />
-              <span className="hidden md:inline">保存到库</span>
+              <span>保存到库</span>
             </button>
             <button
-              onClick={handleExportPNG}
+              onClick={() => void handleExportPNG()}
               data-action="export"
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-border-custom hover:border-sakura rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary hover:bg-surface"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden md:inline">导出 PNG</span>
+              <span>导出 PNG</span>
             </button>
             <button
               onClick={() => {
@@ -734,17 +683,15 @@ function CanvasContent() {
                 addToast("画布已清空", "warning");
               }}
               data-action="clear"
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43] cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#FFF0EF] hover:border-[#FFBDB8] hover:bg-[#FFF0EF]/40 rounded-xl text-xs font-bold text-text-secondary hover:text-[#D04D43]"
             >
               <Trash2 className="w-4 h-4" />
-              <span className="hidden md:inline">清空画布</span>
+              <span>清空画布</span>
             </button>
           </div>
         </aside>
 
-        {/* Center: Canvas Area */}
         <main className="flex-1 p-4 flex flex-col justify-between overflow-hidden relative min-h-0 bg-surface">
-          {/* Canvas Wrapper */}
           <div className="flex-1 relative min-h-0 mb-4">
             <CanvasBoard
               ref={canvasRef}
@@ -753,20 +700,17 @@ function CanvasContent() {
                 setCanRedo(redoable);
               }}
               onSaveState={() => {
-                // Auto-sync history state checks
-                if (canvasRef.current) {
-                  const status = canvasRef.current.getHistoryStatus();
-                  setCanUndo(status.canUndo);
-                  setCanRedo(status.canRedo);
-                }
+                if (!canvasRef.current) return;
+                const status = canvasRef.current.getHistoryStatus();
+                setCanUndo(status.canUndo);
+                setCanRedo(status.canRedo);
               }}
             />
 
-            {/* Quick floating guide */}
-            <div className="absolute top-3 left-3 pointer-events-none z-10 flex flex-col gap-1 text-[11px] font-medium text-text-secondary bg-white/85 backdrop-blur border border-border-custom/50 rounded-xl p-3 max-w-[220px]">
+            <div className="absolute top-3 left-3 pointer-events-none z-10 flex flex-col gap-1 text-[11px] font-medium text-text-secondary bg-white/85 backdrop-blur border border-border-custom/50 rounded-xl p-3 max-w-[260px]">
               <span className="font-bold text-text-primary text-xs flex gap-1 items-center">
-                <HelpCircle className="w-3.5 h-3.5 text-sakura" />{" "}
-                语音指令提示：
+                <HelpCircle className="w-3.5 h-3.5 text-sakura" />
+                语音提示
               </span>
               <span className="flex items-center gap-1">
                 <ChevronRight className="w-3 h-3 text-sakura" />
@@ -774,46 +718,42 @@ function CanvasContent() {
               </span>
               <span className="flex items-center gap-1">
                 <ChevronRight className="w-3 h-3 text-sakura" />
-                “在左上角写上‘你好世界’”
+                “在左上角写上你好世界”
               </span>
               <span className="flex items-center gap-1">
                 <ChevronRight className="w-3 h-3 text-sakura" />
-                “画一个很大的五角星”
+                “画一片夕阳下的海边”
               </span>
               <span className="flex items-center gap-1">
                 <ChevronRight className="w-3 h-3 text-sakura" />
-                “画一个在草地跑的猫咪 (AI)”
-              </span>
-              <span className="flex items-center gap-1">
-                <ChevronRight className="w-3 h-3 text-sakura" />
-                “撤销” / “清空” / “保存”
+                先生成 Canvas 草图，再决定是否高级生成
               </span>
             </div>
           </div>
 
-          {/* Bottom Overlay: Controls & Transcript */}
           <div className="flex flex-col gap-2 z-10 select-none">
-            {/* Transcript Display */}
             <TranscriptBar
               transcript={transcript}
               isRecording={isRecording}
               isProcessing={isProcessing}
+              stage={flowStage}
             />
 
-            {/* Voice Control Core Button Area */}
             <div
               className="h-[96px] flex flex-col items-center justify-center relative"
               data-action="mic"
             >
               <MicButton
                 state={micState}
-                onClick={handleMicTrigger}
-                disabled={isProcessing}
+                onClick={() => void handleMicTrigger()}
+                disabled={isProcessing || credits < 1}
               />
               <span className="text-[10px] font-bold text-text-disabled mt-1 text-center">
-                {isRecording
-                  ? "说出绘图命令，说完了点击按钮"
-                  : "点击按钮开始说话"}
+                {credits < 1
+                  ? "积分不足，无法继续录音"
+                  : isRecording
+                    ? "说出绘图命令，说完后再次点击按钮"
+                    : "点击按钮开始说话"}
               </span>
             </div>
           </div>
@@ -830,9 +770,7 @@ export default function CanvasPage() {
         <div className="flex-1 flex items-center justify-center bg-surface h-full">
           <div className="text-center">
             <div className="w-10 h-10 border-4 border-sakura border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm text-text-secondary font-bold">
-              正在载入创作工作区...
-            </p>
+            <p className="text-sm text-text-secondary font-bold">正在载入创作工作区...</p>
           </div>
         </div>
       }

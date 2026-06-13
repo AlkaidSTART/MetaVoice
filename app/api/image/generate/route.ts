@@ -3,7 +3,6 @@ import { chargeCredits, getUserCredits } from "@/lib/api/credits";
 import { getDashScopeApiKey } from "@/lib/api/config";
 import { generateImageWithDashScope } from "@/lib/dashscope/image";
 import {
-  uploadBufferToStorage,
   uploadRemoteFileToStorage,
 } from "@/lib/supabase/storage";
 import { requireApiUser } from "@/lib/api/auth";

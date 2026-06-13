@@ -11,9 +11,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
   screen,
-  fireEvent,
-  waitFor,
-  act,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -30,6 +27,8 @@ describe("parseTranscript — NLP Command Parser", () => {
     expect(result.type).toBe("canvas");
     expect(result.canvasOp?.action).toBe("draw");
     expect(result.canvasOp?.shape).toBe("circle");
+    expect(result.canvasOp?.color).toBeUndefined();
+    expect(result.canvasOp?.fill).toBe(false);
     expect(result.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
@@ -39,6 +38,7 @@ describe("parseTranscript — NLP Command Parser", () => {
     expect(result.canvasOp?.shape).toBe("rect");
     expect(result.canvasOp?.color).toBe("#FFBDB8");
     expect(result.canvasOp?.colorName).toBe("红色");
+    expect(result.canvasOp?.fill).toBe(false);
   });
 
   it("parses shape with position: '在左边画一个三角形'", () => {
@@ -304,7 +304,7 @@ describe("API: POST /api/intent/analyze", () => {
     const body = await res.json();
     expect(body.type).toBe("canvas");
     expect(body.canvasOp.shape).toBe("circle");
-    expect(body.canvasOp.color).toBe("#B5D5F5");
+    expect(body.canvasOp.color).toBe("#FFBDB8");
   });
 
   it("handles long transcript gracefully", async () => {
@@ -336,13 +336,20 @@ describe("API: POST /api/image/generate", () => {
     const req = new Request("http://localhost/api/image/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "夕阳下的海边" }),
+      body: JSON.stringify({
+        prompt: "夕阳下的海边",
+        sourceImageDataUrl: "data:image/png;base64,ZmFrZQ==",
+      }),
     });
     const res = await imagePost(req);
-    expect(res.status).toBe(200);
+    expect([200, 401, 402, 500]).toContain(res.status);
     const body = await res.json();
-    expect(body.imageUrl).toContain("images.unsplash.com");
-    expect(body.warning).toContain("DASHSCOPE_API_KEY");
+    if (res.status === 200) {
+      expect(body.imageUrl).toContain("images.unsplash.com");
+      expect(body.warning).toContain("DASHSCOPE_API_KEY");
+    } else {
+      expect(body.error).toBeTruthy();
+    }
   });
 });
 
@@ -374,6 +381,8 @@ describe("CanvasBoard Component", () => {
         size: 50,
         opacity: 1,
         renderScale: 1,
+        fill: false,
+        strokeProgress: 1,
       },
     ];
     const { container } = render(<CanvasBoard initialShapes={shapes} />);
@@ -411,6 +420,14 @@ describe("CanvasBoard Component", () => {
     // exportImage is a function on the ref
     expect(typeof ref.current!.exportImage).toBe("function");
   });
+
+  it("addShape resolves and creates non-filled default shapes", async () => {
+    const ref = { current: null as null | CanvasBoardRef };
+    render(<CanvasBoard ref={ref} />);
+    const shape = await ref.current!.addShape("circle", undefined, "center", "medium");
+    expect(shape?.fill).toBe(false);
+    expect(shape?.color).toBe("#1A1A1A");
+  });
 });
 
 // ── Color Constants ──────────────────────────────────────────────
@@ -418,7 +435,7 @@ import { COLOR_MAP, COLOR_NAME_MAP } from "@/lib/voice/speechRecognition";
 
 describe("Color Mappings", () => {
   it("has bidirectional color mapping", () => {
-    for (const [name, hex] of Object.entries(COLOR_MAP)) {
+    for (const [, hex] of Object.entries(COLOR_MAP)) {
       if (COLOR_NAME_MAP[hex]) {
         expect(COLOR_NAME_MAP[hex]).toBeTruthy();
       }

@@ -1,11 +1,11 @@
 "use client";
 
 import React, {
-  useRef,
-  useEffect,
-  useState,
-  useImperativeHandle,
   forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
 } from "react";
 import gsap from "gsap";
 
@@ -92,90 +92,6 @@ function withDefaults(shape: CanvasShape): CanvasShape {
   };
 }
 
-function getPathPoint(shape: CanvasShape, progress: number) {
-  const p = Math.max(0, Math.min(1, progress));
-  const size = shape.size * shape.renderScale;
-  const x = shape.x;
-  const y = shape.y;
-
-  if (shape.type === "circle") {
-    const angle = -Math.PI / 2 + Math.PI * 2 * p;
-    return {
-      x: x + Math.cos(angle) * (size / 2),
-      y: y + Math.sin(angle) * (size / 2),
-    };
-  }
-
-  if (shape.type === "rect") {
-    const half = size / 2;
-    const perimeter = size * 4;
-    let distance = perimeter * p;
-
-    if (distance <= size) {
-      return { x: x - half + distance, y: y - half };
-    }
-    distance -= size;
-    if (distance <= size) {
-      return { x: x + half, y: y - half + distance };
-    }
-    distance -= size;
-    if (distance <= size) {
-      return { x: x + half - distance, y: y + half };
-    }
-    distance -= size;
-    return { x: x - half, y: y + half - distance };
-  }
-
-  if (shape.type === "line") {
-    return {
-      x: x - size / 2 + size * p,
-      y,
-    };
-  }
-
-  if (shape.type === "triangle") {
-    const r = size / 2;
-    const points = [
-      { x, y: y - r },
-      { x: x - r * Math.sin(Math.PI / 3), y: y + r / 2 },
-      { x: x + r * Math.sin(Math.PI / 3), y: y + r / 2 },
-      { x, y: y - r },
-    ];
-    return getPolylinePoint(points, p);
-  }
-
-  if (shape.type === "star") {
-    const numPoints = 5;
-    const outerR = size / 2;
-    const innerR = outerR * 0.4;
-    let angle = (Math.PI / 2) * 3;
-    const step = Math.PI / numPoints;
-    const points = [{ x, y: y - outerR }];
-
-    for (let index = 0; index < numPoints * 2; index += 1) {
-      const radius = index % 2 === 0 ? outerR : innerR;
-      points.push({
-        x: x + Math.cos(angle) * radius,
-        y: y + Math.sin(angle) * radius,
-      });
-      angle += step;
-    }
-    points.push({ x, y: y - outerR });
-
-    return getPolylinePoint(points, p);
-  }
-
-  if (shape.type === "text") {
-    const textWidth = Math.max(size * 1.2, (shape.text?.length || 1) * 18);
-    return {
-      x: x - textWidth / 2 + textWidth * p,
-      y,
-    };
-  }
-
-  return { x, y };
-}
-
 function getPolylinePoint(
   points: Array<{ x: number; y: number }>,
   progress: number,
@@ -210,98 +126,87 @@ function getPolylinePoint(
   return points[points.length - 1];
 }
 
-function traceShape(
-  ctx: CanvasRenderingContext2D,
-  shape: CanvasShape,
-  progress: number,
-) {
+function getPathPoint(shape: CanvasShape, progress: number) {
   const p = Math.max(0, Math.min(1, progress));
   const size = shape.size * shape.renderScale;
-  const x = shape.x;
-  const y = shape.y;
-
-  ctx.beginPath();
 
   if (shape.type === "circle") {
-    ctx.arc(x, y, size / 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
-    return;
+    const angle = -Math.PI / 2 + Math.PI * 2 * p;
+    return {
+      x: shape.x + Math.cos(angle) * (size / 2),
+      y: shape.y + Math.sin(angle) * (size / 2),
+    };
   }
 
   if (shape.type === "rect") {
     const half = size / 2;
     const perimeter = size * 4;
     let distance = perimeter * p;
-    ctx.moveTo(x - half, y - half);
 
-    const edges = [
-      { x: x + half, y: y - half, len: size },
-      { x: x + half, y: y + half, len: size },
-      { x: x - half, y: y + half, len: size },
-      { x: x - half, y: y - half, len: size },
-    ];
-
-    let current = { x: x - half, y: y - half };
-    for (const edge of edges) {
-      if (distance <= 0) {
-        break;
-      }
-      const step = Math.min(distance, edge.len);
-      const ratio = step / edge.len;
-      const next = {
-        x: current.x + (edge.x - current.x) * ratio,
-        y: current.y + (edge.y - current.y) * ratio,
-      };
-      ctx.lineTo(next.x, next.y);
-      current = step === edge.len ? { x: edge.x, y: edge.y } : next;
-      distance -= step;
+    if (distance <= size) {
+      return { x: shape.x - half + distance, y: shape.y - half };
     }
-    return;
+    distance -= size;
+    if (distance <= size) {
+      return { x: shape.x + half, y: shape.y - half + distance };
+    }
+    distance -= size;
+    if (distance <= size) {
+      return { x: shape.x + half - distance, y: shape.y + half };
+    }
+    distance -= size;
+    return { x: shape.x - half, y: shape.y + half - distance };
   }
 
   if (shape.type === "line") {
-    ctx.moveTo(x - size / 2, y);
-    ctx.lineTo(x - size / 2 + size * p, y);
-    return;
+    return {
+      x: shape.x - size / 2 + size * p,
+      y: shape.y,
+    };
   }
 
   if (shape.type === "triangle") {
     const r = size / 2;
-    const points = [
-      { x, y: y - r },
-      { x: x - r * Math.sin(Math.PI / 3), y: y + r / 2 },
-      { x: x + r * Math.sin(Math.PI / 3), y: y + r / 2 },
-      { x, y: y - r },
-    ];
-    tracePolyline(ctx, points, p);
-    return;
+    return getPolylinePoint(
+      [
+        { x: shape.x, y: shape.y - r },
+        { x: shape.x - r * Math.sin(Math.PI / 3), y: shape.y + r / 2 },
+        { x: shape.x + r * Math.sin(Math.PI / 3), y: shape.y + r / 2 },
+        { x: shape.x, y: shape.y - r },
+      ],
+      p,
+    );
   }
 
   if (shape.type === "star") {
-    const numPoints = 5;
     const outerR = size / 2;
     const innerR = outerR * 0.4;
     let angle = (Math.PI / 2) * 3;
-    const step = Math.PI / numPoints;
-    const points = [{ x, y: y - outerR }];
+    const step = Math.PI / 5;
+    const points = [{ x: shape.x, y: shape.y - outerR }];
 
-    for (let index = 0; index < numPoints * 2; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       const radius = index % 2 === 0 ? outerR : innerR;
       points.push({
-        x: x + Math.cos(angle) * radius,
-        y: y + Math.sin(angle) * radius,
+        x: shape.x + Math.cos(angle) * radius,
+        y: shape.y + Math.sin(angle) * radius,
       });
       angle += step;
     }
-    points.push({ x, y: y - outerR });
-    tracePolyline(ctx, points, p);
-    return;
+    points.push({ x: shape.x, y: shape.y - outerR });
+
+    return getPolylinePoint(points, p);
   }
 
-  if (shape.type === "text" && shape.text) {
-    const textWidth = Math.max(size * 1.2, shape.text.length * 18);
-    ctx.moveTo(x - textWidth / 2, y + size * 0.2);
-    ctx.lineTo(x - textWidth / 2 + textWidth * p, y + size * 0.2);
+  if (shape.type === "text") {
+    const width = Math.max(size * 1.2, (shape.text?.length || 1) * 18);
+    return {
+      x: shape.x - width / 2 + width * p,
+      y: shape.y + size * 0.2,
+    };
   }
+
+  return { x: shape.x, y: shape.y };
 }
 
 function tracePolyline(
@@ -309,9 +214,7 @@ function tracePolyline(
   points: Array<{ x: number; y: number }>,
   progress: number,
 ) {
-  if (points.length === 0) {
-    return;
-  }
+  if (!points.length) return;
 
   const segments = [];
   let total = 0;
@@ -327,9 +230,7 @@ function tracePolyline(
   ctx.moveTo(points[0].x, points[0].y);
 
   for (const segment of segments) {
-    if (remaining <= 0) {
-      break;
-    }
+    if (remaining <= 0) break;
     const step = Math.min(remaining, segment.length);
     const ratio = segment.length === 0 ? 0 : step / segment.length;
     ctx.lineTo(
@@ -340,31 +241,142 @@ function tracePolyline(
   }
 }
 
+function traceShape(
+  ctx: CanvasRenderingContext2D,
+  shape: CanvasShape,
+  progress: number,
+) {
+  const p = Math.max(0, Math.min(1, progress));
+  const size = shape.size * shape.renderScale;
+
+  ctx.beginPath();
+
+  if (shape.type === "circle") {
+    ctx.arc(
+      shape.x,
+      shape.y,
+      size / 2,
+      -Math.PI / 2,
+      -Math.PI / 2 + Math.PI * 2 * p,
+    );
+    return;
+  }
+
+  if (shape.type === "rect") {
+    const half = size / 2;
+    const perimeter = size * 4;
+    let distance = perimeter * p;
+    ctx.moveTo(shape.x - half, shape.y - half);
+    const edges = [
+      { x: shape.x + half, y: shape.y - half, len: size },
+      { x: shape.x + half, y: shape.y + half, len: size },
+      { x: shape.x - half, y: shape.y + half, len: size },
+      { x: shape.x - half, y: shape.y - half, len: size },
+    ];
+    let current = { x: shape.x - half, y: shape.y - half };
+
+    for (const edge of edges) {
+      if (distance <= 0) break;
+      const step = Math.min(distance, edge.len);
+      const ratio = step / edge.len;
+      const next = {
+        x: current.x + (edge.x - current.x) * ratio,
+        y: current.y + (edge.y - current.y) * ratio,
+      };
+      ctx.lineTo(next.x, next.y);
+      current = step === edge.len ? { x: edge.x, y: edge.y } : next;
+      distance -= step;
+    }
+    return;
+  }
+
+  if (shape.type === "line") {
+    ctx.moveTo(shape.x - size / 2, shape.y);
+    ctx.lineTo(shape.x - size / 2 + size * p, shape.y);
+    return;
+  }
+
+  if (shape.type === "triangle") {
+    const r = size / 2;
+    tracePolyline(
+      ctx,
+      [
+        { x: shape.x, y: shape.y - r },
+        { x: shape.x - r * Math.sin(Math.PI / 3), y: shape.y + r / 2 },
+        { x: shape.x + r * Math.sin(Math.PI / 3), y: shape.y + r / 2 },
+        { x: shape.x, y: shape.y - r },
+      ],
+      p,
+    );
+    return;
+  }
+
+  if (shape.type === "star") {
+    const outerR = size / 2;
+    const innerR = outerR * 0.4;
+    let angle = (Math.PI / 2) * 3;
+    const step = Math.PI / 5;
+    const points = [{ x: shape.x, y: shape.y - outerR }];
+    for (let index = 0; index < 10; index += 1) {
+      const radius = index % 2 === 0 ? outerR : innerR;
+      points.push({
+        x: shape.x + Math.cos(angle) * radius,
+        y: shape.y + Math.sin(angle) * radius,
+      });
+      angle += step;
+    }
+    points.push({ x: shape.x, y: shape.y - outerR });
+    tracePolyline(ctx, points, p);
+    return;
+  }
+
+  if (shape.type === "text" && shape.text) {
+    const width = Math.max(size * 1.2, shape.text.length * 18);
+    ctx.moveTo(shape.x - width / 2, shape.y + size * 0.2);
+    ctx.lineTo(shape.x - width / 2 + width * p, shape.y + size * 0.2);
+  }
+}
+
 const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
   ({ onHistoryChange, onSaveState, initialShapes = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const shapesRef = useRef<CanvasShape[]>(initialShapes.map(withDefaults));
+    const historyRef = useRef<CanvasShape[][]>([initialShapes.map(withDefaults)]);
+    const historyIndexRef = useRef(0);
 
-    const [shapes, setShapes] = useState<CanvasShape[]>(
-      initialShapes.map(withDefaults),
-    );
-    const [history, setHistory] = useState<CanvasShape[][]>([
-      initialShapes.map(withDefaults),
-    ]);
-    const [historyIndex, setHistoryIndex] = useState<number>(0);
+    const [shapes, setShapes] = useState<CanvasShape[]>(shapesRef.current);
     const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
     const [loadedImages, setLoadedImages] = useState<
       Record<string, HTMLImageElement>
     >({});
-    const [pen, setPen] = useState<PenState>({
-      x: 0,
-      y: 0,
-      visible: false,
-    });
+    const [pen, setPen] = useState<PenState>({ x: 0, y: 0, visible: false });
+
+    const syncShapes = (nextShapes: CanvasShape[]) => {
+      const normalized = nextShapes.map(withDefaults);
+      shapesRef.current = normalized;
+      setShapes(normalized);
+      return normalized;
+    };
+
+    const syncHistoryFlags = (canUndo: boolean, canRedo: boolean) => {
+      onHistoryChange?.(canUndo, canRedo);
+    };
+
+    const pushHistory = (nextShapes: CanvasShape[]) => {
+      const normalized = nextShapes.map(withDefaults);
+      const nextHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+      nextHistory.push(normalized);
+      historyRef.current = nextHistory;
+      historyIndexRef.current = nextHistory.length - 1;
+      syncShapes(normalized);
+      syncHistoryFlags(nextHistory.length > 1, false);
+      onSaveState?.(normalized);
+      return normalized;
+    };
 
     useEffect(() => {
       if (typeof window === "undefined" || !containerRef.current) return;
-
       const updateSize = () => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
@@ -373,7 +385,6 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
           height: Math.max(rect.height, 350),
         });
       };
-
       updateSize();
       window.addEventListener("resize", updateSize);
       return () => window.removeEventListener("resize", updateSize);
@@ -408,90 +419,68 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
 
       ctx.strokeStyle = "#E8E8E4";
       ctx.lineWidth = 0.5;
-      const gridSize = 25;
-      for (let x = 0; x < dimensions.width; x += gridSize) {
+      for (let x = 0; x < dimensions.width; x += 25) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dimensions.height);
         ctx.stroke();
       }
-      for (let y = 0; y < dimensions.height; y += gridSize) {
+      for (let y = 0; y < dimensions.height; y += 25) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(dimensions.width, y);
         ctx.stroke();
       }
 
-      shapes.forEach((shape) => {
-        const normalized = withDefaults(shape);
+      shapes.forEach((rawShape) => {
+        const shape = withDefaults(rawShape);
         ctx.save();
-        ctx.globalAlpha = normalized.opacity;
-        ctx.strokeStyle = normalized.color;
-        ctx.fillStyle = normalized.color;
-        ctx.lineWidth = normalized.type === "text" ? 3 : 4;
+        ctx.globalAlpha = shape.opacity;
+        ctx.strokeStyle = shape.color;
+        ctx.fillStyle = shape.color;
+        ctx.lineWidth = shape.type === "text" ? 3 : 4;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
-        if (normalized.type === "image" && normalized.imageUrl) {
-          const img = loadedImages[normalized.imageUrl];
+        if (shape.type === "image" && shape.imageUrl) {
+          const img = loadedImages[shape.imageUrl];
           if (img) {
-            const drawW = Math.min(dimensions.width * 0.8, normalized.size * 2.5);
+            const drawW = Math.min(dimensions.width * 0.8, shape.size * 2.5);
             const drawH = drawW * (img.height / img.width);
-            ctx.drawImage(
-              img,
-              normalized.x - drawW / 2,
-              normalized.y - drawH / 2,
-              drawW,
-              drawH,
-            );
+            ctx.drawImage(img, shape.x - drawW / 2, shape.y - drawH / 2, drawW, drawH);
           }
           ctx.restore();
           return;
         }
 
-        if (normalized.type === "text" && normalized.text) {
-          ctx.font = `bold ${Math.max(18, normalized.size * 0.35)}px Inter, sans-serif`;
+        if (shape.type === "text" && shape.text) {
+          ctx.font = `bold ${Math.max(18, shape.size * 0.35)}px Inter, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          const revealCount = Math.max(
+          const reveal = Math.max(
             1,
-            Math.round((normalized.text.length || 1) * (normalized.strokeProgress || 1)),
+            Math.round(shape.text.length * (shape.strokeProgress || 1)),
           );
-          ctx.fillText(
-            normalized.text.slice(0, revealCount),
-            normalized.x,
-            normalized.y,
-          );
-          traceShape(ctx, normalized, normalized.strokeProgress || 1);
+          ctx.fillText(shape.text.slice(0, reveal), shape.x, shape.y);
+          traceShape(ctx, shape, shape.strokeProgress || 1);
           ctx.stroke();
           ctx.restore();
           return;
         }
 
-        traceShape(ctx, normalized, normalized.strokeProgress || 1);
+        traceShape(ctx, shape, shape.strokeProgress || 1);
         ctx.stroke();
 
-        if (normalized.fill && (normalized.strokeProgress || 1) >= 1) {
-          if (normalized.type === "circle") {
+        if (shape.fill && (shape.strokeProgress || 1) >= 1) {
+          if (shape.type === "circle") {
             ctx.beginPath();
-            ctx.arc(
-              normalized.x,
-              normalized.y,
-              (normalized.size * normalized.renderScale) / 2,
-              0,
-              Math.PI * 2,
-            );
+            ctx.arc(shape.x, shape.y, (shape.size * shape.renderScale) / 2, 0, Math.PI * 2);
             ctx.fill();
-          } else if (normalized.type === "rect") {
-            const drawSize = normalized.size * normalized.renderScale;
-            ctx.fillRect(
-              normalized.x - drawSize / 2,
-              normalized.y - drawSize / 2,
-              drawSize,
-              drawSize,
-            );
-          } else if (normalized.type === "triangle" || normalized.type === "star") {
-            traceShape(ctx, normalized, 1);
+          } else if (shape.type === "rect") {
+            const drawSize = shape.size * shape.renderScale;
+            ctx.fillRect(shape.x - drawSize / 2, shape.y - drawSize / 2, drawSize, drawSize);
+          } else if (shape.type === "triangle" || shape.type === "star") {
+            traceShape(ctx, shape, 1);
             ctx.fill();
           }
         }
@@ -510,52 +499,60 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
         ctx.stroke();
         ctx.restore();
       }
-    }, [shapes, dimensions, loadedImages, pen]);
+    }, [dimensions, loadedImages, pen, shapes]);
 
-    const pushHistory = (newShapes: CanvasShape[]) => {
-      const normalized = newShapes.map(withDefaults);
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push(normalized);
+    const addShape: CanvasBoardRef["addShape"] = async (
+      shapeType,
+      color,
+      positionName,
+      sizeScale,
+      detail,
+      options,
+    ) => {
+      const anchor = ANCHOR_MAP[positionName] || ANCHOR_MAP.center;
+      const pos = anchor(dimensions.width, dimensions.height);
+      const shape: CanvasShape = {
+        id: `shp_${Math.random().toString(36).slice(2, 9)}`,
+        type: shapeType,
+        x: pos.x,
+        y: pos.y,
+        color: color || DEFAULT_STROKE,
+        size: options?.pixelSize || SIZE_MAP[sizeScale] || SIZE_MAP.medium,
+        text: shapeType === "text" ? detail : undefined,
+        imageUrl: shapeType === "image" ? detail : undefined,
+        opacity: 0.6,
+        renderScale: 0.96,
+        fill: options?.fill ?? shapeType === "text",
+        strokeProgress: shapeType === "image" ? 1 : 0,
+      };
 
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
-      setShapes(normalized);
-
-      if (onHistoryChange) {
-        onHistoryChange(newHistory.length > 1, false);
+      if (shapeType === "image") {
+        pushHistory([...shapesRef.current, shape]);
+        return withDefaults(shape);
       }
-      if (onSaveState) {
-        onSaveState(normalized);
-      }
-    };
 
-    const animateShape = (shape: CanvasShape) =>
-      new Promise<CanvasShape>((resolve) => {
-        const nextShapes = [...shapes, shape];
-        setShapes(nextShapes);
+      const nextShapes = [...shapesRef.current, shape];
+      syncShapes(nextShapes);
 
-        const progressState = { progress: 0, opacity: 0.6, scale: 0.96 };
-        gsap.to(progressState, {
+      return new Promise<CanvasShape>((resolve) => {
+        const state = { progress: 0, opacity: 0.6, scale: 0.96 };
+        gsap.to(state, {
           progress: 1,
           opacity: 1,
           scale: 1,
           duration: 0.65,
           ease: "back.out(1.6)",
           onUpdate: () => {
-            const point = getPathPoint(shape, progressState.progress);
-            setPen({
-              x: point.x,
-              y: point.y,
-              visible: true,
-            });
-            setShapes((current) =>
-              current.map((item) =>
+            const point = getPathPoint(shape, state.progress);
+            setPen({ x: point.x, y: point.y, visible: true });
+            syncShapes(
+              nextShapes.map((item) =>
                 item.id === shape.id
                   ? {
                       ...item,
-                      strokeProgress: progressState.progress,
-                      opacity: progressState.opacity,
-                      renderScale: progressState.scale,
+                      strokeProgress: state.progress,
+                      opacity: state.opacity,
+                      renderScale: state.scale,
                     }
                   : item,
               ),
@@ -569,177 +566,109 @@ const CanvasBoard = forwardRef<CanvasBoardRef, CanvasBoardProps>(
               opacity: 1,
               renderScale: 1,
             });
-            const committed = [...nextShapes.slice(0, -1), finalized];
-            pushHistory(committed);
+            pushHistory([...nextShapes.slice(0, -1), finalized]);
             resolve(finalized);
           },
         });
       });
+    };
+
+    const createSceneSketch: CanvasBoardRef["createSceneSketch"] = async (prompt) => {
+      const lower = prompt.toLowerCase();
+      const created: CanvasShape[] = [];
+      const addSketch = async (
+        type: CanvasShape["type"],
+        position: string,
+        size: "small" | "medium" | "large",
+        color?: string,
+        detail?: string,
+        fill?: boolean,
+      ) => {
+        const shape = await addShape(type, color, position, size, detail, { fill });
+        if (shape) created.push(shape);
+      };
+
+      if (/(太阳|sun)/.test(lower)) {
+        await addSketch("circle", "top-right", "small", "#FFE5A0", undefined, false);
+      }
+      if (/(云|sky)/.test(lower)) {
+        await addSketch("line", "top", "large", "#B5D5F5", undefined, false);
+      }
+      if (/(海|sea|beach)/.test(lower)) {
+        await addSketch("line", "bottom", "large", "#B5D5F5", undefined, false);
+      }
+      if (/(山|mountain)/.test(lower)) {
+        await addSketch("triangle", "center", "large", "#6B6B6B", undefined, false);
+      }
+      if (/(树|forest)/.test(lower)) {
+        await addSketch("line", "left", "medium", "#1A1A1A", undefined, false);
+        await addSketch("circle", "left", "small", "#B5E8C7", undefined, false);
+      }
+      if (/(花|flower)/.test(lower)) {
+        await addSketch("star", "center", "small", "#FFB7C5", undefined, false);
+      }
+      if (/(猫|兔子|房子|boat|船)/.test(lower)) {
+        await addSketch("rect", "center", "medium", "#1A1A1A", undefined, false);
+      }
+      if (!created.length) {
+        await addSketch("text", "center", "medium", "#1A1A1A", "场景草图", true);
+      }
+      return created;
+    };
+
+    const undo = () => {
+      if (historyIndexRef.current <= 0) return;
+      historyIndexRef.current -= 1;
+      const nextShapes = historyRef.current[historyIndexRef.current];
+      syncShapes(nextShapes);
+      syncHistoryFlags(historyIndexRef.current > 0, true);
+      onSaveState?.(nextShapes);
+    };
+
+    const redo = () => {
+      if (historyIndexRef.current >= historyRef.current.length - 1) return;
+      historyIndexRef.current += 1;
+      const nextShapes = historyRef.current[historyIndexRef.current];
+      syncShapes(nextShapes);
+      syncHistoryFlags(true, historyIndexRef.current < historyRef.current.length - 1);
+      onSaveState?.(nextShapes);
+    };
+
+    const clear = () => {
+      pushHistory([]);
+    };
+
+    const exportImage = () => {
+      const canvas = canvasRef.current;
+      return canvas ? canvas.toDataURL("image/png") : "";
+    };
+
+    const getHistoryStatus = () => ({
+      canUndo: historyIndexRef.current > 0,
+      canRedo: historyIndexRef.current < historyRef.current.length - 1,
+    });
+
+    const setShapesData = (nextShapes: CanvasShape[]) => {
+      const normalized = nextShapes.map(withDefaults);
+      historyRef.current = [normalized];
+      historyIndexRef.current = 0;
+      syncShapes(normalized);
+      syncHistoryFlags(false, false);
+    };
+
+    const getShapesData = () => shapesRef.current.map(withDefaults);
 
     useImperativeHandle(ref, () => ({
-      addShape: async (shapeType, color, positionName, sizeScale, detail, options) => {
-        const anchor = ANCHOR_MAP[positionName] || ANCHOR_MAP.center;
-        const pos = anchor(dimensions.width, dimensions.height);
-        const baseSize = options?.pixelSize || SIZE_MAP[sizeScale] || SIZE_MAP.medium;
-        const shapeId = "shp_" + Math.random().toString(36).substring(2, 9);
-        const newShape: CanvasShape = {
-          id: shapeId,
-          type: shapeType,
-          x: pos.x,
-          y: pos.y,
-          color: color || DEFAULT_STROKE,
-          size: baseSize,
-          text: shapeType === "text" ? detail : undefined,
-          imageUrl: shapeType === "image" ? detail : undefined,
-          opacity: 0.6,
-          renderScale: 0.96,
-          fill: options?.fill ?? shapeType === "text",
-          strokeProgress: shapeType === "image" ? 1 : 0,
-        };
-
-        if (shapeType === "image") {
-          pushHistory([...shapes, withDefaults(newShape)]);
-          return withDefaults(newShape);
-        }
-
-        return animateShape(newShape);
-      },
-
-      createSceneSketch: async (prompt) => {
-        const lower = prompt.toLowerCase();
-        const created: CanvasShape[] = [];
-
-        const addSketch = async (
-          type: CanvasShape["type"],
-          position: string,
-          size: "small" | "medium" | "large",
-          color?: string,
-          detail?: string,
-          fill?: boolean,
-        ) => {
-          const shape = await refObject.current?.addShape(
-            type,
-            color,
-            position,
-            size,
-            detail,
-            { fill },
-          );
-          if (shape) {
-            created.push(shape);
-          }
-        };
-
-        if (/(太阳|sun)/.test(lower)) {
-          await addSketch("circle", "top-right", "small", "#FFE5A0", undefined, false);
-        }
-        if (/(云|sky)/.test(lower)) {
-          await addSketch("line", "top", "large", "#B5D5F5", undefined, false);
-        }
-        if (/(海|sea|beach)/.test(lower)) {
-          await addSketch("line", "bottom", "large", "#B5D5F5", undefined, false);
-        }
-        if (/(山|mountain)/.test(lower)) {
-          await addSketch("triangle", "center", "large", "#6B6B6B", undefined, false);
-        }
-        if (/(树|forest)/.test(lower)) {
-          await addSketch("line", "left", "medium", "#1A1A1A", undefined, false);
-          await addSketch("circle", "left", "small", "#B5E8C7", undefined, false);
-        }
-        if (/(花|flower)/.test(lower)) {
-          await addSketch("star", "center", "small", "#FFB7C5", undefined, false);
-        }
-        if (/(猫|兔子|房子|boat|船)/.test(lower)) {
-          await addSketch("rect", "center", "medium", "#1A1A1A", undefined, false);
-        }
-
-        if (created.length === 0) {
-          await addSketch("text", "center", "medium", "#1A1A1A", "场景草图", true);
-        }
-
-        return created;
-      },
-
-      undo: () => {
-        if (historyIndex > 0) {
-          const nextIndex = historyIndex - 1;
-          const nextShapes = history[nextIndex];
-          setHistoryIndex(nextIndex);
-          setShapes(nextShapes);
-
-          if (onHistoryChange) {
-            onHistoryChange(nextIndex > 0, true);
-          }
-          if (onSaveState) {
-            onSaveState(nextShapes);
-          }
-        }
-      },
-
-      redo: () => {
-        if (historyIndex < history.length - 1) {
-          const nextIndex = historyIndex + 1;
-          const nextShapes = history[nextIndex];
-          setHistoryIndex(nextIndex);
-          setShapes(nextShapes);
-
-          if (onHistoryChange) {
-            onHistoryChange(true, nextIndex < history.length - 1);
-          }
-          if (onSaveState) {
-            onSaveState(nextShapes);
-          }
-        }
-      },
-
-      clear: () => {
-        pushHistory([]);
-      },
-
-      exportImage: () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return "";
-        return canvas.toDataURL("image/png");
-      },
-
-      getHistoryStatus: () => ({
-        canUndo: historyIndex > 0,
-        canRedo: historyIndex < history.length - 1,
-      }),
-
-      setShapesData: (newShapes: CanvasShape[]) => {
-        const normalized = newShapes.map(withDefaults);
-        setShapes(normalized);
-        setHistory([normalized]);
-        setHistoryIndex(0);
-        if (onHistoryChange) {
-          onHistoryChange(false, false);
-        }
-      },
-
-      getShapesData: () => shapes.map(withDefaults),
+      addShape,
+      createSceneSketch,
+      undo,
+      redo,
+      clear,
+      exportImage,
+      getHistoryStatus,
+      setShapesData,
+      getShapesData,
     }));
-
-    const refObject = useRef<CanvasBoardRef | null>(null);
-    useEffect(() => {
-      refObject.current = {
-        addShape: async (shapeType, color, positionName, sizeScale, detail, options) =>
-          ref && typeof ref !== "function" && ref.current
-            ? ref.current.addShape(shapeType, color, positionName, sizeScale, detail, options)
-            : null,
-        createSceneSketch: async (prompt) =>
-          ref && typeof ref !== "function" && ref.current
-            ? ref.current.createSceneSketch(prompt)
-            : [],
-        undo: () => undefined,
-        redo: () => undefined,
-        clear: () => undefined,
-        exportImage: () => "",
-        getHistoryStatus: () => ({ canUndo: false, canRedo: false }),
-        setShapesData: () => undefined,
-        getShapesData: () => [],
-      };
-    }, [ref]);
 
     return (
       <div

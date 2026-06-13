@@ -27,6 +27,7 @@ import {
   VoiceRecognitionManager,
   type IntentResult,
 } from "@/lib/voice/speechRecognition";
+import { CanvasAgent } from "@/lib/voice/canvasAgent";
 import { executeAction, matchVoiceToAction } from "@/lib/voice/voiceActionMapper";
 import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
 import {
@@ -323,11 +324,27 @@ function CanvasContent() {
       },
       (err) => {
         const normalized = VoiceRecognitionManager.normalizeError(err);
-        console.error("Speech Recognition Error:", normalized, err);
+        const errorMessage = normalized?.message || normalized?.error || "未知错误";
+        const errorCode = normalized?.error || "unknown";
+        
+        console.error("Speech Recognition Error:", {
+          code: errorCode,
+          message: errorMessage,
+          original: err,
+        });
+        
         setIsRecording(false);
         setMicState("error");
         setFlowStage("");
-        addToast("语音输入遇到问题，请重新录制。", "warning");
+        
+        if (errorCode === "not-allowed" || errorCode === "PermissionDeniedError") {
+          addToast("请允许麦克风权限后重试", "warning");
+        } else if (errorCode === "audio-capture" || errorCode === "NotFoundError") {
+          addToast("未检测到麦克风设备，请检查后重试", "warning");
+        } else {
+          addToast("语音输入遇到问题，请重新录制", "warning");
+        }
+        
         setTimeout(() => setMicState("idle"), 1200);
       },
       () => {

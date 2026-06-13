@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useState, useTransition } from "react";
+import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
@@ -24,17 +24,16 @@ import IntentModal from "@/components/voice/IntentModal";
 import ToastContainer, { ToastMessage, ToastType } from "@/components/ui/Toast";
 import {
   COLOR_NAME_MAP,
-  VoiceRecognitionManager,
   type IntentResult,
 } from "@/lib/voice/speechRecognition";
 import { CanvasAgent } from "@/lib/voice/canvasAgent";
+import { WebSpeechRecognitionManager } from "@/lib/voice/webSpeechRecognition";
 import { executeAction, matchVoiceToAction } from "@/lib/voice/voiceActionMapper";
 import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
 import {
-  analyzeIntent,
   fetchCredits,
   generateImage,
-  transcribeVoiceAudio,
+  processWithAgent,
 } from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
 
@@ -83,7 +82,9 @@ function CanvasContent() {
   const [credits, setCredits] = useState(50);
 
   const canvasRef = useRef<CanvasBoardRef>(null);
-  const voiceManagerRef = useRef<VoiceRecognitionManager | null>(null);
+  const canvasAgentRef = useRef<CanvasAgent | null>(null);
+  const webSpeechRef = useRef<WebSpeechRecognitionManager | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState("");
 
   const addToast = (message: string, type: ToastType = "info") => {
     const id = `toast_${Math.random().toString(36).slice(2, 9)}`;
@@ -164,6 +165,17 @@ function CanvasContent() {
   const applyIntentToCanvas = async (intent: IntentResult) => {
     if (!canvasRef.current) return;
 
+    if (canvasAgentRef.current) {
+      const success = await canvasAgentRef.current.executeIntent(intent);
+      if (success) {
+        if (intent.type === "canvas" && intent.canvasOp?.color) {
+          setCurrentColor(intent.canvasOp.color);
+          setCurrentColorName(intent.canvasOp.colorName || COLOR_NAME_MAP[intent.canvasOp.color] || "自定义");
+        }
+      }
+      return;
+    }
+
     if (intent.type === "ai_generate") {
       await canvasRef.current.createSceneSketch(intent.imagePrompt || intent.transcript);
       addToast("已先生成 Canvas 草图", "success");
@@ -216,6 +228,11 @@ function CanvasContent() {
     const action = intent.canvasOp?.action;
     if (!action) return;
 
+    if (canvasAgentRef.current) {
+      await canvasAgentRef.current.executeIntent(intent);
+      return;
+    }
+
     if (action === "undo") {
       canvasRef.current?.undo();
       addToast("已撤销上一步操作", "info");
@@ -250,7 +267,10 @@ function CanvasContent() {
 
     try {
       setFlowStage("正在解析指令");
-      const intent = await analyzeIntent(text);
+
+      // 使用 Agent 处理语音输入
+      const agentResult = await processWithAgent(text);
+      const intent = agentResult.intent;
       setCurrentIntent(intent);
 
       if (intent.type === "control" && intent.canvasOp) {
@@ -288,70 +308,6 @@ function CanvasContent() {
     }
   };
 
-  const createVoiceManager = () =>
-    new VoiceRecognitionManager(
-      async ({ blob, mimeType }) => {
-        setIsRecording(false);
-        setIsProcessing(true);
-        setMicState("processing");
-        setFlowStage("正在识别语音");
-
-        try {
-          const result = await transcribeVoiceAudio(blob, mimeType);
-          const text = result.transcript?.trim() || "";
-          if (typeof result.credits === "number") {
-            setCredits(result.credits);
-          }
-          setTranscript(text);
-
-          if (!text) {
-            addToast("未识别到有效语音内容，请再试一次。", "warning");
-            setIdleState();
-            return;
-          }
-
-          await processTranscript(text);
-        } catch (error) {
-          console.error("Speech Recognition Error:", error);
-          const message = error instanceof Error ? error.message : "";
-          setMicState("error");
-          setIsProcessing(false);
-          setFlowStage("");
-          addToast(message.includes("积分不足") ? "积分不足" : "语音识别失败，请重试。", "error");
-          setTimeout(() => setMicState("idle"), 1200);
-          await refreshCredits();
-        }
-      },
-      (err) => {
-        const normalized = VoiceRecognitionManager.normalizeError(err);
-        const errorMessage = normalized?.message || normalized?.error || "未知错误";
-        const errorCode = normalized?.error || "unknown";
-        
-        console.error("Speech Recognition Error:", {
-          code: errorCode,
-          message: errorMessage,
-          original: err,
-        });
-        
-        setIsRecording(false);
-        setMicState("error");
-        setFlowStage("");
-        
-        if (errorCode === "not-allowed" || errorCode === "PermissionDeniedError") {
-          addToast("请允许麦克风权限后重试", "warning");
-        } else if (errorCode === "audio-capture" || errorCode === "NotFoundError") {
-          addToast("未检测到麦克风设备，请检查后重试", "warning");
-        } else {
-          addToast("语音输入遇到问题，请重新录制", "warning");
-        }
-        
-        setTimeout(() => setMicState("idle"), 1200);
-      },
-      () => {
-        setIsRecording(false);
-      },
-    );
-
   useEffect(() => {
     const checkAuth = async () => {
       const supabase = createClient();
@@ -388,16 +344,16 @@ function CanvasContent() {
   }, [artworkIdQuery, router]);
 
   useEffect(() => {
-    voiceManagerRef.current?.destroy();
-    const manager = createVoiceManager();
-    if (manager.isSupported()) {
-      voiceManagerRef.current = manager;
+    if (canvasRef.current && !canvasAgentRef.current) {
+      canvasAgentRef.current = new CanvasAgent({
+        onToast: (message, type) => addToast(message, type),
+        onDrawingComplete: () => {
+          setCanvasMode("canvas");
+        },
+      });
+      canvasAgentRef.current.setCanvasRef(canvasRef.current);
     }
-    return () => {
-      voiceManagerRef.current?.destroy();
-    };
-    // createVoiceManager intentionally closes over the latest state setters.
-  }, []);
+  }, [addToast]);
 
   const handleAdvancedGenerate = async () => {
     if (!currentIntent || !pendingImageSource) return;
@@ -449,17 +405,28 @@ function CanvasContent() {
   };
 
   const handleMicTrigger = async () => {
-    if (credits < 1) {
-      addToast("积分不足", "error");
-      return;
-    }
-
     if (isRecording) {
-      voiceManagerRef.current?.stop();
+      // 停止录音
+      webSpeechRef.current?.stop();
+      setIsRecording(false);
+      setInterimTranscript("");
+
+      // 如果有最终文本，处理它
+      if (transcript.trim()) {
+        setIsProcessing(true);
+        setMicState("processing");
+        setFlowStage("正在解析指令");
+        await processTranscript(transcript);
+      } else {
+        setMicState("idle");
+        setFlowStage("");
+      }
       return;
     }
 
+    // 开始录音
     setTranscript("");
+    setInterimTranscript("");
     setFlowStage("正在录音");
     setIsRecording(true);
     setMicState("recording");
@@ -478,29 +445,77 @@ function CanvasContent() {
       return;
     }
 
-    voiceManagerRef.current?.destroy();
-    const freshManager = createVoiceManager();
-    voiceManagerRef.current = freshManager;
+    // 使用 Web Speech API 进行实时语音识别
+    webSpeechRef.current?.destroy();
+    const webSpeechManager = new WebSpeechRecognitionManager({
+      onInterim: (text) => {
+        // 实时显示用户正在说的内容
+        setInterimTranscript(text);
+      },
+      onFinal: (text) => {
+        // 累积最终识别结果
+        setTranscript((prev) => prev + text);
+        setInterimTranscript("");
+      },
+      onError: (error) => {
+        console.error("Web Speech API error:", error);
+        setIsRecording(false);
+        setMicState("error");
+        setFlowStage("");
+        
+        // 如果是网络错误，提供备用输入方式
+        if (error.includes("网络") || error.includes("network")) {
+          const simulatedText = prompt(
+            "语音识别网络连接失败，请手动输入绘画指令：",
+          );
+          if (simulatedText) {
+            setTranscript(simulatedText);
+            setIsProcessing(true);
+            setMicState("processing");
+            setFlowStage("正在解析指令");
+            processTranscript(simulatedText);
+            return;
+          }
+        }
+        
+        addToast(error || "语音识别失败，请重试", "error");
+        setTimeout(() => setMicState("idle"), 1200);
+      },
+      onEnd: () => {
+        // Web Speech API 自动结束时（如静音检测）
+        setIsRecording(false);
+        setInterimTranscript("");
 
-    if (freshManager.isSupported()) {
-      await freshManager.start();
+        // 如果有识别结果，自动处理
+        if (transcript.trim()) {
+          setIsProcessing(true);
+          setMicState("processing");
+          setFlowStage("正在解析指令");
+          processTranscript(transcript);
+        } else {
+          setMicState("idle");
+          setFlowStage("");
+        }
+      },
+    });
+    webSpeechRef.current = webSpeechManager;
+
+    if (!webSpeechManager.isSupported()) {
+      addToast("您的浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器", "error");
+      setIsRecording(false);
+      setMicState("error");
+      setFlowStage("");
+      setTimeout(() => setMicState("idle"), 1200);
       return;
     }
 
-    const simulatedText = prompt(
-      "请输入你想执行的绘画指令（语音模拟）",
-    );
-    if (simulatedText) {
-      setTranscript(simulatedText);
+    const started = webSpeechManager.start();
+    if (!started) {
+      addToast("无法启动语音识别，请检查麦克风权限", "error");
       setIsRecording(false);
-      setIsProcessing(true);
-      setMicState("processing");
-      setFlowStage("正在识别语音");
-      await processTranscript(simulatedText);
-    } else {
-      setIsRecording(false);
-      setMicState("idle");
+      setMicState("error");
       setFlowStage("");
+      setTimeout(() => setMicState("idle"), 1200);
     }
   };
 
@@ -751,6 +766,7 @@ function CanvasContent() {
           <div className="flex flex-col gap-2 z-10 select-none">
             <TranscriptBar
               transcript={transcript}
+              interimTranscript={interimTranscript}
               isRecording={isRecording}
               isProcessing={isProcessing}
               stage={flowStage}

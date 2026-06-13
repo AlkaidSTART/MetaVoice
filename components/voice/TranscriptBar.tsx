@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { MessageSquare } from "lucide-react";
 import { COLOR_MAP } from "@/lib/voice/speechRecognition";
 
 interface TranscriptBarProps {
   transcript: string;
+  interimTranscript?: string;
   isRecording: boolean;
   isProcessing: boolean;
   stage?: string;
@@ -46,6 +47,7 @@ const ACTION_KEYWORDS = [
 
 export default function TranscriptBar({
   transcript,
+  interimTranscript = "",
   isRecording,
   isProcessing,
   stage = "",
@@ -128,7 +130,7 @@ export default function TranscriptBar({
     });
   }, [transcript]);
 
-  if (!transcript && !isRecording && !isProcessing) {
+  if (!transcript && !interimTranscript && !isRecording && !isProcessing) {
     return (
       <div
         className="w-full max-w-2xl mx-auto h-12 flex items-center justify-center text-text-secondary text-sm italic border border-border-custom/40 rounded-2xl bg-white/50 backdrop-blur-md px-6 select-none"
@@ -150,14 +152,21 @@ export default function TranscriptBar({
       aria-label="实时语音字幕条"
     >
       <div className="flex-1 text-sm font-medium leading-relaxed text-text-primary">
-        {isRecording && !transcript && (
+        {isRecording && !transcript && !interimTranscript && (
           <span className="text-text-secondary transcript-cursor italic">
             正在倾听...
+            <span className="inline-block w-0.5 h-4 bg-sakura ml-1 animate-blink align-middle" />
           </span>
         )}
-        {isRecording && transcript && (
+        {isRecording && (transcript || interimTranscript) && (
           <span className="text-text-secondary transcript-cursor">
             {highlightedContent}
+            {interimTranscript && (
+              <span className="text-sakura font-normal">
+                {interimTranscript}
+              </span>
+            )}
+            <span className="inline-block w-0.5 h-4 bg-sakura ml-1 animate-blink align-middle" />
           </span>
         )}
         {!isRecording && isProcessing && (
@@ -186,8 +195,19 @@ export default function TranscriptBar({
             opacity: 1;
           }
         }
+        @keyframes blink {
+          0%, 50% {
+            opacity: 1;
+          }
+          51%, 100% {
+            opacity: 0;
+          }
+        }
         .animate-slide-up {
           animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .animate-blink {
+          animation: blink 1s step-end infinite;
         }
       `}</style>
     </div>

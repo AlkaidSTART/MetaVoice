@@ -6,6 +6,11 @@ import {
   getUserArtworks,
   saveArtwork,
 } from "@/lib/supabase/db";
+import {
+  getPublicArtworksFromMemory,
+  getArtworksFromMemory,
+  saveArtworkToMemory,
+} from "@/lib/supabase/memoryStore";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,12 +18,22 @@ export async function GET(request: NextRequest) {
 
     if (scope === "mine") {
       const user = await requireApiUser();
-      const artworks = await getUserArtworks(user.id);
-      return jsonOk({ artworks });
+      try {
+        const artworks = await getUserArtworks(user.id);
+        return jsonOk({ artworks });
+      } catch {
+        const artworks = getArtworksFromMemory(user.id);
+        return jsonOk({ artworks });
+      }
     }
 
-    const artworks = await getPublicArtworks();
-    return jsonOk({ artworks });
+    try {
+      const artworks = await getPublicArtworks();
+      return jsonOk({ artworks });
+    } catch {
+      const artworks = getPublicArtworksFromMemory();
+      return jsonOk({ artworks });
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("Unauthorized", 401);
@@ -44,21 +59,34 @@ export async function POST(request: NextRequest) {
       return jsonError("canvasJson and thumbnailDataUrl are required", 400);
     }
 
-    const artwork = await saveArtwork(
-      artworkId,
-      user.id,
-      title,
-      canvasJson,
-      thumbnailDataUrl,
-      tags,
-      isPublic,
-    );
+    try {
+      const artwork = await saveArtwork(
+        artworkId,
+        user.id,
+        title,
+        canvasJson,
+        thumbnailDataUrl,
+        tags,
+        isPublic,
+      );
 
-    if (!artwork) {
-      return jsonError("Failed to save artwork", 500);
+      if (!artwork) {
+        throw new Error("Database save failed");
+      }
+
+      return jsonOk({ artwork });
+    } catch {
+      const artwork = saveArtworkToMemory(user.id, {
+        title,
+        canvas_json: canvasJson,
+        thumbnail_url: thumbnailDataUrl,
+        tags,
+        is_public: isPublic,
+        user_id: user.id,
+        id: artworkId || undefined,
+      });
+      return jsonOk({ artwork });
     }
-
-    return jsonOk({ artwork });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("Unauthorized", 401);

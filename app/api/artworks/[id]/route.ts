@@ -1,7 +1,11 @@
-import { NextRequest } from "next/server";
+import { NextRequest, RouteContext } from "next/server";
 import { requireApiUser } from "@/lib/api/auth";
 import { jsonError, jsonOk } from "@/lib/api/http";
 import { deleteArtwork, getArtwork } from "@/lib/supabase/db";
+import {
+  getArtworkFromMemory,
+  deleteArtworkFromMemory,
+} from "@/lib/supabase/memoryStore";
 
 export async function GET(
   _request: NextRequest,
@@ -12,12 +16,17 @@ export async function GET(
     const artwork = await getArtwork(id);
 
     if (!artwork) {
-      return jsonError("Artwork not found", 404);
+      const memArtwork = getArtworkFromMemory(id);
+      if (!memArtwork) return jsonError("Artwork not found", 404);
+      return jsonOk({ artwork: memArtwork });
     }
 
     return jsonOk({ artwork });
-  } catch (error) {
-    return jsonError("Failed to fetch artwork", 500, String(error));
+  } catch {
+    const { id } = await context.params;
+    const artwork = getArtworkFromMemory(id);
+    if (!artwork) return jsonError("Artwork not found", 404);
+    return jsonOk({ artwork });
   }
 }
 
@@ -31,15 +40,16 @@ export async function DELETE(
     const success = await deleteArtwork(id, user.id);
 
     if (!success) {
-      return jsonError("Artwork not found or not owned by current user", 404);
+      const memSuccess = deleteArtworkFromMemory(user.id, id);
+      if (!memSuccess) return jsonError("Artwork not found or not owned by current user", 404);
     }
 
     return jsonOk({ success: true });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHORIZED") {
-      return jsonError("Unauthorized", 401);
-    }
-
-    return jsonError("Failed to delete artwork", 500, String(error));
+  } catch {
+    const user = await requireApiUser();
+    const { id } = await context.params;
+    const success = deleteArtworkFromMemory(user.id, id);
+    if (!success) return jsonError("Artwork not found or not owned by current user", 404);
+    return jsonOk({ success: true });
   }
 }

@@ -22,6 +22,22 @@ export async function analyzeIntent(transcript: string) {
   return parseJson<IntentResult & { warning?: string }>(response);
 }
 
+export async function processWithAgent(transcript: string) {
+  const response = await fetch("/api/agent/process", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ transcript }),
+  });
+
+  return parseJson<{
+    intent: IntentResult;
+    raw?: unknown;
+    warning?: string;
+  }>(response);
+}
+
 export async function transcribeVoiceAudio(audio: Blob, mimeType?: string) {
   const formData = new FormData();
   const extension = mimeType?.includes("wav")

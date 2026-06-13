@@ -1,7 +1,7 @@
 "use client";
 
 import type { CanvasBoardRef } from "@/components/canvas/CanvasBoard";
-import type { IntentResult, PositionAnchor } from "@/lib/voice/speechRecognition";
+import type { IntentResult } from "@/lib/voice/speechRecognition";
 
 export interface CanvasAgentCallbacks {
   onDrawingComplete?: (shapeName: string) => void;

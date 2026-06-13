@@ -37,18 +37,18 @@ export async function transcribeVoiceAudio(audio: Blob, mimeType?: string) {
     body: formData,
   });
 
-  return parseJson<{ transcript: string; duration?: number; warning?: string }>(
+  return parseJson<{ transcript: string; duration?: number; warning?: string; credits?: number }>(
     response,
   );
 }
 
-export async function generateImage(prompt: string) {
+export async function generateImage(prompt: string, sourceImageDataUrl: string) {
   const response = await fetch("/api/image/generate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, sourceImageDataUrl }),
   });
 
   return parseJson<{
@@ -56,5 +56,15 @@ export async function generateImage(prompt: string) {
     storageUrl?: string;
     taskId?: string;
     warning?: string;
+    credits?: number;
   }>(response);
+}
+
+export async function fetchCredits() {
+  const response = await fetch("/api/credits", {
+    method: "GET",
+    credentials: "include",
+  });
+
+  return parseJson<{ credits: number }>(response);
 }

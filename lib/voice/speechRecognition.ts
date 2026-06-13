@@ -52,6 +52,7 @@ export interface IntentResult {
     shape?: "circle" | "rect" | "line" | "triangle" | "star";
     color?: string;
     colorName?: string;
+    fill?: boolean;
     position?: {
       anchor: PositionAnchor;
       offsetX?: number;
@@ -221,6 +222,7 @@ export function parseTranscript(text: string): IntentResult {
         text: word,
         color,
         colorName,
+        fill: true,
         position: { anchor },
         size: { scale: "medium" },
       },
@@ -243,8 +245,8 @@ export function parseTranscript(text: string): IntentResult {
   }
 
   if (matchedShape) {
-    let color = "#B5D5F5";
-    let colorName = "蓝色";
+    let color: string | undefined;
+    let colorName: string | undefined;
     for (const [key, value] of Object.entries(COLOR_MAP)) {
       if (cleanText.includes(key)) {
         color = value;
@@ -279,6 +281,7 @@ export function parseTranscript(text: string): IntentResult {
         shape: matchedShape,
         color,
         colorName,
+        fill: false,
         position: { anchor },
         size: pixelSize
           ? { width: pixelSize, height: pixelSize, radius: pixelSize, scale }

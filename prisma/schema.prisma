@@ -15,6 +15,7 @@ model Profile {
   id         String    @id @default(uuid())
   name       String    @default("新用户")
   avatarUrl  String?   @map("avatar_url")
+  credits    Int       @default(50)
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   artworks   Artwork[]

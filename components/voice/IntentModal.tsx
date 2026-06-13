@@ -1,20 +1,22 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { Sparkles, Palette, CornerDownRight } from "lucide-react";
+import { Sparkles, CornerDownRight } from "lucide-react";
 import gsap from "gsap";
 
 interface IntentModalProps {
   isOpen: boolean;
   transcript: string;
-  onSelect: (option: "canvas" | "ai_generate") => void;
+  credits: number;
+  onConfirm: () => void;
   onClose: () => void;
 }
 
 export default function IntentModal({
   isOpen,
   transcript,
-  onSelect,
+  credits,
+  onConfirm,
   onClose,
 }: IntentModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -50,9 +52,7 @@ export default function IntentModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "1") {
-        onSelect("canvas");
-      } else if (e.key === "2") {
-        onSelect("ai_generate");
+        onConfirm();
       } else if (e.key === "Escape") {
         onClose();
       }
@@ -60,7 +60,7 @@ export default function IntentModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onSelect, onClose]);
+  }, [isOpen, onConfirm, onClose]);
 
   if (!isOpen) return null;
 
@@ -96,51 +96,30 @@ export default function IntentModal({
         {/* Options */}
         <div className="flex flex-col gap-3">
           <p className="text-xs font-bold text-text-secondary">你想要：</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Option 1: Canvas Drawing */}
-            <button
-              onClick={() => onSelect("canvas")}
-              className="group flex flex-col items-center justify-center gap-3 p-4 border-2 border-macaron-blue hover:bg-macaron-blue-light/20 rounded-2xl transition-standard text-center focus:outline-none focus:ring-4 focus:ring-macaron-blue/30 active:scale-95 cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-macaron-blue-light flex items-center justify-center text-[#2F6196] group-hover:scale-110 transition-transform">
-                <Palette className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="block text-xs font-bold text-text-disabled">
-                  按 &quot;1&quot; 选择
-                </span>
-                <span className="text-sm font-bold text-[#2F6196]">
-                  绘制图形
-                </span>
-              </div>
-            </button>
-
-            {/* Option 2: AI Image Generation */}
-            <button
-              onClick={() => onSelect("ai_generate")}
-              className="group flex flex-col items-center justify-center gap-3 p-4 border-2 border-lavender hover:bg-lavender/10 rounded-2xl transition-standard text-center focus:outline-none focus:ring-4 focus:ring-lavender/30 active:scale-95 cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-xl bg-[#F0ECFC] flex items-center justify-center text-[#6A4BC9] group-hover:scale-110 transition-transform">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="block text-xs font-bold text-text-disabled">
-                  按 &quot;2&quot; 选择
-                </span>
-                <span className="text-sm font-bold text-[#6A4BC9]">
-                  AI 生图
-                </span>
-              </div>
-            </button>
-          </div>
+          <button
+            onClick={onConfirm}
+            disabled={credits < 1}
+            className="group flex flex-col items-center justify-center gap-3 p-5 border-2 border-lavender hover:bg-lavender/10 rounded-2xl transition-standard text-center focus:outline-none focus:ring-4 focus:ring-lavender/30 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[#F0ECFC] flex items-center justify-center text-[#6A4BC9] group-hover:scale-110 transition-transform">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="block text-xs font-bold text-text-disabled">
+                按 &quot;1&quot; 确认，消耗 1 积分
+              </span>
+              <span className="text-sm font-bold text-[#6A4BC9]">
+                生成高级图片
+              </span>
+            </div>
+          </button>
         </div>
 
         {/* Accessibility Helper Label */}
         <div className="text-center bg-surface border border-border-custom/20 rounded-lg py-1.5 px-3">
           <p className="text-xs font-medium text-text-secondary leading-normal">
-            <span className="font-semibold text-text-primary">说&quot;1&quot;或&quot;2&quot;</span>{" "}
-            可以通过语音直接选择，或者点击上方按钮。
+            <span className="font-semibold text-text-primary">当前剩余 {credits} 积分</span>
+            ，关闭则保留 Canvas 草图，仅在确认后执行高级图生图。
           </p>
         </div>
 

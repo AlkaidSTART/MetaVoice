@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashScopeApiKey } from "@/lib/api/config";
 import { analyzeIntentWithDashScope } from "@/lib/dashscope/analyze";
+import { parseTranscript } from "@/lib/voice/speechRecognition";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,19 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!getDashScopeApiKey()) {
-      // Return a simulated parse for canvas/AI compatibility
-      return NextResponse.json({
-        type: "canvas",
-        confidence: 0.95,
-        canvasOp: {
-          action: "draw",
-          shape: "circle",
-          color: "#B5D5F5",
-          position: { anchor: "center" },
-          size: { scale: "medium" }
-        },
-        transcript
-      });
+      return NextResponse.json(parseTranscript(transcript));
     }
 
     const parsed = await analyzeIntentWithDashScope(transcript);

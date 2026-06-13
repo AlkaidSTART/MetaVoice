@@ -8,7 +8,11 @@ export type ImageGenerationResult = {
 
 export async function generateImageWithDashScope(
   prompt: string,
+  sourceImageDataUrl?: string,
 ): Promise<ImageGenerationResult> {
+  const sourceImage = sourceImageDataUrl?.startsWith("data:")
+    ? sourceImageDataUrl
+    : undefined;
   const response = await dashScopeFetch(
     "/api/v1/services/aigc/text2image/image-synthesis",
     {
@@ -21,6 +25,7 @@ export async function generateImageWithDashScope(
         model: "wanx2.1-t2i-turbo",
         input: {
           prompt,
+          ...(sourceImage ? { base_image_url: sourceImage } : {}),
         },
         parameters: {
           size: "1024*1024",

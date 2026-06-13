@@ -8,6 +8,7 @@ interface TranscriptBarProps {
   transcript: string;
   isRecording: boolean;
   isProcessing: boolean;
+  stage?: string;
 }
 
 const SHAPE_KEYWORDS = [
@@ -47,6 +48,7 @@ export default function TranscriptBar({
   transcript,
   isRecording,
   isProcessing,
+  stage = "",
 }: TranscriptBarProps) {
   // Custom keyword highlighter to make it premium
   const highlightedContent = useMemo(() => {
@@ -160,12 +162,14 @@ export default function TranscriptBar({
         )}
         {!isRecording && isProcessing && (
           <span className="text-text-secondary italic">
-            正在解析画图指令...
+            {stage || "正在解析画图指令..."}
           </span>
         )}
         {!isRecording && !isProcessing && transcript && (
           <div className="flex flex-wrap items-center gap-1">
-            <span className="text-text-secondary mr-1">识别到:</span>
+            <span className="text-text-secondary mr-1">
+              {stage ? `${stage}：` : "识别到:"}
+            </span>
             {highlightedContent}
           </div>
         )}

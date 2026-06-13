@@ -16,6 +16,15 @@ export type ArtworkRecord = {
   user_avatar_url?: string;
 };
 
+export type ProfileRecord = {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  credits: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type ArtworkWithProfile = Prisma.ArtworkGetPayload<{
   include: {
     profile: {
@@ -183,4 +192,86 @@ export async function deleteArtwork(
     console.error("Error deleting artwork:", error);
     return false;
   }
+}
+
+export async function ensureProfile(userId: string, email?: string) {
+  const existing = await prisma.profile.findUnique({
+    where: { id: userId },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  const fallbackName = email?.split("@")[0] || "新用户";
+
+  return prisma.profile.create({
+    data: {
+      id: userId,
+      name: fallbackName,
+    },
+  });
+}
+
+export async function getProfile(userId: string): Promise<ProfileRecord | null> {
+  try {
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId },
+    });
+
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      id: profile.id,
+      name: profile.name,
+      avatar_url: profile.avatarUrl,
+      credits: profile.credits,
+      created_at: profile.createdAt.toISOString(),
+      updated_at: profile.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    return null;
+  }
+}
+
+export async function consumeCredits(
+  userId: string,
+  amount: number,
+): Promise<{ credits: number }> {
+  if (amount <= 0) {
+    throw new Error("INVALID_CREDIT_AMOUNT");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const profile = await tx.profile.findUnique({
+      where: { id: userId },
+    });
+
+    if (!profile) {
+      throw new Error("PROFILE_NOT_FOUND");
+    }
+
+    if (profile.credits < amount) {
+      throw new Error("INSUFFICIENT_CREDITS");
+    }
+
+    return tx.profile.update({
+      where: { id: userId },
+      data: {
+        credits: {
+          decrement: amount,
+        },
+      },
+      select: {
+        credits: true,
+      },
+    });
+  });
+
+  return {
+    credits: updated.credits,
+  };
 }

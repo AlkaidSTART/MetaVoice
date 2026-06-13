@@ -79,7 +79,7 @@ function CanvasContent() {
   const [currentColor, setCurrentColor] = useState("#1A1A1A");
   const [currentColorName, setCurrentColorName] = useState("默认描边");
   const [canvasMode, setCanvasMode] = useState<"canvas" | "ai_generate">("canvas");
-  const [credits, setCredits] = useState(0);
+  const [credits, setCredits] = useState(50);
 
   const canvasRef = useRef<CanvasBoardRef>(null);
   const voiceManagerRef = useRef<VoiceRecognitionManager | null>(null);

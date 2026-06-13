@@ -200,6 +200,15 @@ export async function ensureProfile(userId: string, email?: string) {
   });
 
   if (existing) {
+    if (existing.credits === 0) {
+      return prisma.profile.update({
+        where: { id: userId },
+        data: {
+          credits: 50,
+        },
+      });
+    }
+
     return existing;
   }
 

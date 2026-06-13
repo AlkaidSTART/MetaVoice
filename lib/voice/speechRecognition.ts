@@ -21,6 +21,19 @@ type SpeechRecognitionErrorLike = {
   timeStamp?: number;
 };
 
+function readEventField<T>(
+  source: unknown,
+  key: string,
+  guard: (value: unknown) => value is T,
+): T | undefined {
+  if (!source || (typeof source !== "object" && typeof source !== "function")) {
+    return undefined;
+  }
+
+  const value = Reflect.get(source, key);
+  return guard(value) ? value : undefined;
+}
+
 type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
@@ -398,27 +411,37 @@ export class VoiceRecognitionManager {
         message: typeof error === "string" ? error : "Unknown speech recognition error",
       };
     }
+    const errorCode = readEventField(
+      error,
+      "error",
+      (value): value is string => typeof value === "string",
+    );
+    const eventType = readEventField(
+      error,
+      "type",
+      (value): value is string => typeof value === "string",
+    );
+    const message = readEventField(
+      error,
+      "message",
+      (value): value is string => typeof value === "string",
+    );
+    const timeStamp = readEventField(
+      error,
+      "timeStamp",
+      (value): value is number => typeof value === "number",
+    );
 
-    const candidate = error as Record<string, unknown>;
+    const normalizedCode =
+      errorCode ??
+      (eventType === "error" ? "unknown" : eventType) ??
+      "unknown";
+
     const details = {
-      error:
-        typeof candidate.error === "string"
-          ? candidate.error
-          : typeof candidate.type === "string"
-            ? candidate.type
-            : "unknown",
-      message:
-        typeof candidate.message === "string"
-          ? candidate.message
-          : undefined,
-      type:
-        typeof candidate.type === "string"
-          ? candidate.type
-          : undefined,
-      timeStamp:
-        typeof candidate.timeStamp === "number"
-          ? candidate.timeStamp
-          : undefined,
+      error: normalizedCode,
+      message,
+      type: eventType,
+      timeStamp,
     };
 
     return details;

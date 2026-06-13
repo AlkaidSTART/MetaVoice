@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma/client";
+import type { Artwork as PrismaArtwork, Prisma } from "@/generated/prisma";
 import { uploadThumbnail } from "./storage";
 
 export type ArtworkRecord = {
@@ -14,6 +15,34 @@ export type ArtworkRecord = {
   user_name?: string;
   user_avatar_url?: string;
 };
+
+type ArtworkWithProfile = Prisma.ArtworkGetPayload<{
+  include: {
+    profile: {
+      select: { name: true; avatarUrl: true };
+    };
+  };
+}>;
+
+function toArtworkRecord(
+  art: PrismaArtwork | ArtworkWithProfile,
+): ArtworkRecord {
+  const profile = "profile" in art ? art.profile : undefined;
+
+  return {
+    id: art.id,
+    user_id: art.userId,
+    title: art.title,
+    canvas_json: art.canvasJson,
+    thumbnail_url: art.thumbnailUrl,
+    tags: art.tags,
+    is_public: art.isPublic,
+    created_at: art.createdAt.toISOString(),
+    updated_at: art.updatedAt.toISOString(),
+    user_name: profile?.name || undefined,
+    user_avatar_url: profile?.avatarUrl || undefined,
+  };
+}
 
 /**
  * Fetch public artworks for the Square (community gallery).
@@ -31,19 +60,13 @@ export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
       },
     });
 
-    return artworks.map((art) => ({
-      id: art.id,
-      user_id: art.userId,
-      title: art.title,
-      canvas_json: art.canvasJson,
-      thumbnail_url: art.thumbnailUrl,
-      tags: art.tags,
-      is_public: art.isPublic,
-      created_at: art.createdAt.toISOString(),
-      updated_at: art.updatedAt.toISOString(),
-      user_name: art.profile?.name || "匿名用户",
-      user_avatar_url: art.profile?.avatarUrl || undefined,
-    }));
+    return artworks.map((art: ArtworkWithProfile) => {
+      const record = toArtworkRecord(art);
+      return {
+        ...record,
+        user_name: record.user_name || "匿名用户",
+      };
+    });
   } catch (error) {
     console.error("Error fetching public artworks:", error);
     return [];
@@ -62,17 +85,7 @@ export async function getUserArtworks(
       orderBy: { updatedAt: "desc" },
     });
 
-    return artworks.map((art) => ({
-      id: art.id,
-      user_id: art.userId,
-      title: art.title,
-      canvas_json: art.canvasJson,
-      thumbnail_url: art.thumbnailUrl,
-      tags: art.tags,
-      is_public: art.isPublic,
-      created_at: art.createdAt.toISOString(),
-      updated_at: art.updatedAt.toISOString(),
-    }));
+    return artworks.map(toArtworkRecord);
   } catch (error) {
     console.error("Error fetching user artworks:", error);
     return [];
@@ -86,17 +99,7 @@ export async function getArtwork(id: string): Promise<ArtworkRecord | null> {
   try {
     const art = await prisma.artwork.findUnique({ where: { id } });
     if (!art) return null;
-    return {
-      id: art.id,
-      user_id: art.userId,
-      title: art.title,
-      canvas_json: art.canvasJson,
-      thumbnail_url: art.thumbnailUrl,
-      tags: art.tags,
-      is_public: art.isPublic,
-      created_at: art.createdAt.toISOString(),
-      updated_at: art.updatedAt.toISOString(),
-    };
+    return toArtworkRecord(art);
   } catch (error) {
     console.error("Error fetching artwork:", error);
     return null;
@@ -156,17 +159,7 @@ export async function saveArtwork(
         },
       });
 
-      return {
-        id: art.id,
-        user_id: art.userId,
-        title: art.title,
-        canvas_json: art.canvasJson,
-        thumbnail_url: art.thumbnailUrl,
-        tags: art.tags,
-        is_public: art.isPublic,
-        created_at: art.createdAt.toISOString(),
-        updated_at: art.updatedAt.toISOString(),
-      };
+      return toArtworkRecord(art);
     }
   } catch (error) {
     console.error("Error saving artwork:", error);

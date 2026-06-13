@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         transcript: "画一个红色的圆形在中间",
         credits: charged.credits,
-        warning: "FUNASR_API_URL environment variable is not defined. Falling back to local mock.",
+        warning: charged.fallback
+          ? "Database unavailable, using local development credits."
+          : "FUNASR_API_URL environment variable is not defined. Falling back to local mock.",
       });
     }
 
@@ -37,6 +39,9 @@ export async function POST(req: NextRequest) {
       transcript: data.transcript,
       duration: data.duration,
       credits: charged.credits,
+      warning: charged.fallback
+        ? "Database unavailable, using local development credits."
+        : undefined,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

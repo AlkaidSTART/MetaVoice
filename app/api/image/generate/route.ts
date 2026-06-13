@@ -36,7 +36,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
         credits: charged.credits,
-        warning: "DASHSCOPE_API_KEY is not defined. Falling back to default pattern image.",
+        warning: charged.fallback
+          ? "Database unavailable, using local development credits."
+          : "DASHSCOPE_API_KEY is not defined. Falling back to default pattern image.",
       });
     }
 
@@ -53,6 +55,9 @@ export async function POST(req: NextRequest) {
       storageUrl: uploaded.publicUrl,
       taskId: result.taskId,
       credits: charged.credits,
+      warning: charged.fallback
+        ? "Database unavailable, using local development credits."
+        : undefined,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

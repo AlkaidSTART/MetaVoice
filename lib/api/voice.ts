@@ -66,5 +66,5 @@ export async function fetchCredits() {
     credentials: "include",
   });
 
-  return parseJson<{ credits: number }>(response);
+  return parseJson<{ credits: number; warning?: string }>(response);
 }

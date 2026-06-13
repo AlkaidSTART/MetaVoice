@@ -6,7 +6,12 @@ export async function GET() {
   try {
     const user = await requireApiUser();
     const credits = await getUserCredits(user.id, user.email);
-    return jsonOk(credits);
+    return jsonOk({
+      credits: credits.credits,
+      warning: credits.fallback
+        ? "Database unavailable, using local development credits."
+        : undefined,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("Unauthorized", 401);

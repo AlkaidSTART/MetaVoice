@@ -46,11 +46,12 @@ export async function transcribeAudioFile(file: File): Promise<TranscribeResult>
   });
 
   if (!response.ok) {
-    let details: unknown;
+    const text = await response.text();
+    let details: unknown = text;
     try {
-      details = await response.json();
+      details = JSON.parse(text);
     } catch {
-      details = await response.text();
+      // 如果不是 JSON，保持为文本
     }
 
     throw new Error(

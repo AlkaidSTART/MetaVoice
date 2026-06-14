@@ -1,13 +1,23 @@
 import type { IntentResult } from "@/lib/voice/speechRecognition";
 
 async function parseJson<T>(response: Response): Promise<T> {
-  const body = await response.json();
-
+  const text = await response.text();
+  
   if (!response.ok) {
-    throw new Error(body?.error || "Request failed");
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // 如果不是 JSON，保持为文本
+    }
+    throw new Error((body as { error?: string })?.error || text || "Request failed");
   }
 
-  return body as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error("Invalid JSON response");
+  }
 }
 
 export async function analyzeIntent(transcript: string) {

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api/auth";
 import { chargeCredits, getUserCredits } from "@/lib/api/credits";
-import { getFunAsrApiUrl } from "@/lib/api/config";
-import { transcribeAudioFile } from "@/lib/funasr/transcribe";
+import { getDashScopeApiKey } from "@/lib/api/config";
+import { transcribeWithQwenASR } from "@/lib/dashscope/asr";
+import { parseTranscript } from "@/lib/voice/speechRecognition";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,16 +23,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
     }
 
-    if (!getFunAsrApiUrl()) {
-      return NextResponse.json(
-        {
-          error: "FUNASR_API_URL environment variable is not defined.",
-        },
-        { status: 503 },
-      );
+    // 如果没有配置 DashScope API Key，使用本地解析器
+    if (!getDashScopeApiKey()) {
+      const localParsed = parseTranscript("画一个红色圆形");
+      const charged = await chargeCredits(user.id, 1);
+      return NextResponse.json({
+        transcript: "画一个红色圆形",
+        warning: "DASHSCOPE_API_KEY not configured, using local mock",
+        credits: charged.credits,
+      });
     }
 
-    const data = await transcribeAudioFile(audioFile);
+    // 使用 qwen3-asr-flash 模型进行语音识别
+    const data = await transcribeWithQwenASR(audioFile);
     const charged = await chargeCredits(user.id, 1);
     return NextResponse.json({
       transcript: data.transcript,

@@ -21,6 +21,7 @@ import { DrawInstruction } from '../lib/draw-schema';
 import XfyunVoiceInput from '../components/XfyunVoiceInput';
 import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function CanvasPage() {
   const router = useRouter();
@@ -678,7 +679,8 @@ export default function CanvasPage() {
         ref={headerRef}
         className="h-14 bg-surface/80 backdrop-blur-sm border-b border-sakura/10 flex items-center justify-between px-6"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <LanguageSwitcher />
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sakura-light to-sakura/30 flex items-center justify-center shadow-sm">
             <span className="text-sakura font-bold text-sm">VC</span>
           </div>

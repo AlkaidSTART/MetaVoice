@@ -78,6 +78,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
   const managerRef = useRef<WebSpeechRecognitionManager | null>(null);
   const handlersRef = useRef<Set<(cmd: VoiceCommand) => void>>(new Set());
   const finalRef = useRef("");
+  const interimRef = useRef("");
 
   // ── dispatch helper ──
 
@@ -115,27 +116,39 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     if (managerRef.current) return managerRef.current;
 
     managerRef.current = createWebSpeechManager({
-      onInterim: (text) => setInterimTranscript(text),
+      onInterim: (text) => {
+        interimRef.current = text;
+        setInterimTranscript(text);
+      },
 
       onFinal: (text) => {
         finalRef.current = `${finalRef.current}${text}`.trim();
+        interimRef.current = "";
         setTranscript(finalRef.current);
         setInterimTranscript("");
       },
 
       onError: (message) => {
         setError(message);
+        setState("error");
       },
 
       onEnd: () => {
         const text = finalRef.current.trim();
+        const fallbackText = interimRef.current.trim();
         if (text) {
           setTranscript(text);
+          setInterimTranscript("");
+          setState("ready");
+        } else if (fallbackText) {
+          finalRef.current = fallbackText;
+          setTranscript(fallbackText);
           setInterimTranscript("");
           setState("ready");
         } else {
           setState("idle");
         }
+        interimRef.current = "";
       },
     });
 
@@ -151,6 +164,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     setTranscript("");
     setInterimTranscript("");
     finalRef.current = "";
+    interimRef.current = "";
 
     const mgr = getManager();
     const ok = mgr.start();
@@ -164,6 +178,11 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
 
   const stopListening = useCallback(() => {
     if (state !== "listening") return;
+    const pendingText = interimRef.current.trim();
+    if (pendingText && !finalRef.current.trim()) {
+      finalRef.current = pendingText;
+      setTranscript(pendingText);
+    }
     managerRef.current?.stop();
     setInterimTranscript("");
   }, [state]);
@@ -184,6 +203,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     setTranscript("");
     setInterimTranscript("");
     finalRef.current = "";
+    interimRef.current = "";
     setState("idle");
   }, [state]);
 
@@ -195,6 +215,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     setTranscript("");
     setInterimTranscript("");
     finalRef.current = "";
+    interimRef.current = "";
     setError(null);
     setState("idle");
   }, []);

@@ -415,7 +415,7 @@ export default function LoginPage() {
         {/* 底部信息 */}
         <div className="mt-8 text-center">
           <p className="text-sm text-text-secondary">
-            © 2025 VoiceCanvas · 让每个人都能创作
+            © 2026 VoiceCanvas · 让每个人都能创作
           </p>
         </div>
       </div>

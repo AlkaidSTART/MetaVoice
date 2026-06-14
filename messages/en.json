@@ -1,0 +1,125 @@
+{
+  "common": {
+    "appName": "VoiceCanvas",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back"
+  },
+  "login": {
+    "title": "Voice Canvas",
+    "subtitle": "Paint with your voice",
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "No account?",
+    "hasAccount": "Have an account?",
+    "guestLogin": "Guest Login",
+    "loginSuccess": "Login successful",
+    "registerSuccess": "Registration successful",
+    "loginError": "Login failed, please try again",
+    "registerError": "Registration failed, please try again"
+  },
+  "canvas": {
+    "title": "Canvas",
+    "trySay": "Try saying:",
+    "trySayExample": "Draw a red circle",
+    "undo": "Undo",
+    "redo": "Redo",
+    "newCanvas": "New Canvas",
+    "clearCanvas": "Clear Canvas",
+    "save": "Save Artwork",
+    "export": "Export Image",
+    "aiMode": "AI Mode",
+    "canvasMode": "Canvas Mode",
+    "recording": "Recording...",
+    "processing": "Processing...",
+    "transcriptPlaceholder": "Speak what you want to draw...",
+    "undoDev": "Undo feature in development",
+    "redoDev": "Redo feature in development",
+    "clearConfirm": "Are you sure you want to clear the canvas?",
+    "saveSuccess": "Artwork saved",
+    "exportSuccess": "Image exported",
+    "voiceRecognized": "Voice result filled in"
+  },
+  "saveModal": {
+    "title": "Save Artwork",
+    "namePlaceholder": "Name your artwork",
+    "descriptionPlaceholder": "Add description (optional)",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "gallery": {
+    "title": "Gallery",
+    "empty": "No saved artworks yet",
+    "emptyHint": "Create your first artwork on the canvas!",
+    "deleteConfirm": "Are you sure you want to delete this artwork?",
+    "deleteSuccess": "Artwork deleted",
+    "loadSuccess": "Artwork loaded"
+  },
+  "voice": {
+    "startRecording": "Start Recording",
+    "stopRecording": "Stop Recording",
+    "micButtonLabel": "Microphone Button",
+    "micButtonActive": "Recording",
+    "micButtonIdle": "Click to start recording",
+    "recognitionError": "Voice recognition failed, please try again",
+    "recognitionNotSupported": "Your browser does not support voice recognition"
+  },
+  "toast": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "shapes": {
+    "circle": "circle",
+    "rectangle": "rectangle",
+    "triangle": "triangle",
+    "line": "line",
+    "star": "star",
+    "text": "text"
+  },
+  "colors": {
+    "red": "red",
+    "blue": "blue",
+    "green": "green",
+    "pink": "pink",
+    "yellow": "yellow",
+    "purple": "purple",
+    "orange": "orange",
+    "white": "white",
+    "black": "black"
+  },
+  "positions": {
+    "center": "center",
+    "left": "left",
+    "right": "right",
+    "top": "top",
+    "bottom": "bottom"
+  },
+  "sizes": {
+    "large": "large",
+    "medium": "medium",
+    "small": "small",
+    "veryLarge": "very large",
+    "verySmall": "very small"
+  },
+  "commands": {
+    "draw": "draw",
+    "write": "write",
+    "undo": "undo",
+    "redo": "redo",
+    "clear": "clear",
+    "save": "save",
+    "export": "export"
+  }
+}

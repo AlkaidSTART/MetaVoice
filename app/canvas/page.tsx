@@ -66,7 +66,6 @@ function CanvasContent() {
   const [artworkTitle, setArtworkTitle] = useState("未命名画作");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [micState, setMicState] = useState<MicState>("idle");
-  const [transcript, setTranscript] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [flowStage, setFlowStage] = useState<FlowStage>("");
@@ -83,11 +82,12 @@ function CanvasContent() {
 
   const canvasRef = useRef<CanvasBoardRef>(null);
   const canvasAgentRef = useRef<CanvasAgent | null>(null);
-  const [interimTranscript, setInterimTranscript] = useState("");
-
   // 使用全局语音控制
   const {
     isListening,
+    transcript,
+    interimTranscript,
+    transcriptSource,
     startListening,
     stopListening,
     registerCommandHandler,
@@ -414,6 +414,7 @@ function CanvasContent() {
   // 注册语音指令处理器
   useEffect(() => {
     const handleCommand = async (command: VoiceCommand) => {
+      setIsRecording(false);
       setMicState("processing");
       setFlowStage("正在解析指令");
       
@@ -440,15 +441,12 @@ function CanvasContent() {
       // 停止录音
       stopListening();
       setIsRecording(false);
-      setInterimTranscript("");
-      setMicState("idle");
-      setFlowStage("");
+      setMicState("processing");
+      setFlowStage("正在识别语音");
       return;
     }
 
     // 开始录音
-    setTranscript("");
-    setInterimTranscript("");
     setIsRecording(true);
     setMicState("recording");
     setFlowStage("正在录音");
@@ -711,6 +709,7 @@ function CanvasContent() {
             <TranscriptBar
               transcript={transcript}
               interimTranscript={interimTranscript}
+              transcriptSource={transcriptSource}
               isRecording={isRecording}
               isProcessing={isProcessing}
               stage={flowStage}

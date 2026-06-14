@@ -1,4 +1,4 @@
-import { NextRequest, RouteContext } from "next/server";
+import { NextRequest } from "next/server";
 import { requireApiUser } from "@/lib/api/auth";
 import { jsonError, jsonOk } from "@/lib/api/http";
 import { deleteArtwork, getArtwork } from "@/lib/supabase/db";

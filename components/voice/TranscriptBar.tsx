@@ -3,10 +3,12 @@
 import { useMemo } from "react";
 import { MessageSquare } from "lucide-react";
 import { COLOR_MAP } from "@/lib/voice/speechRecognition";
+import type { TranscriptSource } from "@/lib/voice/VoiceContext";
 
 interface TranscriptBarProps {
   transcript: string;
   interimTranscript?: string;
+  transcriptSource?: TranscriptSource | null;
   isRecording: boolean;
   isProcessing: boolean;
   stage?: string;
@@ -48,10 +50,18 @@ const ACTION_KEYWORDS = [
 export default function TranscriptBar({
   transcript,
   interimTranscript = "",
+  transcriptSource = null,
   isRecording,
   isProcessing,
   stage = "",
 }: TranscriptBarProps) {
+  const sourceLabelMap: Record<TranscriptSource, string> = {
+    web_api: "Web API",
+    funasr: "FunASR",
+    merged: "Web API + FunASR",
+  };
+  const sourceLabel = transcriptSource ? sourceLabelMap[transcriptSource] : "";
+
   // Custom keyword highlighter to make it premium
   const highlightedContent = useMemo(() => {
     if (!transcript) return null;
@@ -177,12 +187,18 @@ export default function TranscriptBar({
         {!isRecording && !isProcessing && transcript && (
           <div className="flex flex-wrap items-center gap-1">
             <span className="text-text-secondary mr-1">
-              {stage ? `${stage}：` : "识别到:"}
+              {stage ? `${stage}：` : "用户输入:"}
             </span>
             {highlightedContent}
           </div>
         )}
       </div>
+
+      {!!sourceLabel && !isRecording && transcript && (
+        <div className="ml-4 shrink-0 rounded-full border border-border-custom bg-surface px-2.5 py-1 text-[11px] font-bold text-text-secondary">
+          {sourceLabel}
+        </div>
+      )}
 
       <style jsx global>{`
         @keyframes slide-up {

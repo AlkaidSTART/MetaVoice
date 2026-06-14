@@ -21,6 +21,7 @@ interface SpeechRecognitionInstance {
   interimResults: boolean;
   lang: string;
   maxAlternatives: number;
+  maxResults?: number;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
@@ -88,12 +89,8 @@ export class WebSpeechRecognitionManager {
         let interimTranscript = "";
         let finalTranscript = "";
 
-        console.log("语音识别结果事件:", event);
-
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          console.log(`结果 ${i}: isFinal=${result.isFinal}, transcript=${result[0].transcript}`);
-          
           const transcript = result[0].transcript;
           if (result.isFinal) {
             finalTranscript += transcript;
@@ -103,12 +100,10 @@ export class WebSpeechRecognitionManager {
         }
 
         if (interimTranscript) {
-          console.log("触发 onInterim:", interimTranscript);
           this.callbacks.onInterim(interimTranscript);
         }
 
         if (finalTranscript) {
-          console.log("触发 onFinal:", finalTranscript);
           this.callbacks.onFinal(finalTranscript);
         }
       };

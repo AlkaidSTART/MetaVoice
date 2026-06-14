@@ -56,9 +56,7 @@ export default function TranscriptBar({
   stage = "",
 }: TranscriptBarProps) {
   const sourceLabelMap: Record<TranscriptSource, string> = {
-    web_api: "Web API",
-    funasr: "FunASR",
-    merged: "Web API + FunASR",
+    web_api: "Web Speech API",
   };
   const sourceLabel = transcriptSource ? sourceLabelMap[transcriptSource] : "";
 

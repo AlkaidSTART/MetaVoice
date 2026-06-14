@@ -8,12 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { createWebSpeechManager, type WebSpeechRecognitionManager } from "./webSpeechRecognition";
+import {
+  createWebSpeechManager,
+  type WebSpeechRecognitionManager,
+} from "./webSpeechRecognition";
 import { parseTranscript } from "./speechRecognition";
-import { transcribeVoiceAudio } from "@/lib/api/voice";
 
 export type VoiceState = "idle" | "listening" | "processing" | "error";
-export type TranscriptSource = "web_api" | "funasr" | "merged";
+export type TranscriptSource = "web_api";
 
 export interface VoiceCommand {
   type: "draw" | "control" | "ai_generate" | "unknown";
@@ -36,7 +38,9 @@ export interface VoiceContextValue {
   startListening: () => Promise<void>;
   stopListening: () => void;
   toggleListening: () => Promise<void>;
-  registerCommandHandler: (handler: (command: VoiceCommand) => void) => () => void;
+  registerCommandHandler: (
+    handler: (command: VoiceCommand) => void,
+  ) => () => void;
   canvasRef: React.RefObject<unknown>;
   setCanvasRef: (ref: unknown) => void;
 }
@@ -81,18 +85,17 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
   const [state, setState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
-  const [transcriptSource, setTranscriptSource] = useState<TranscriptSource | null>(null);
+  const [transcriptSource, setTranscriptSource] =
+    useState<TranscriptSource | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
   const webSpeechRef = useRef<WebSpeechRecognitionManager | null>(null);
-  const commandHandlersRef = useRef<Set<(command: VoiceCommand) => void>>(new Set());
+  const commandHandlersRef = useRef<Set<(command: VoiceCommand) => void>>(
+    new Set(),
+  );
   const canvasRefRef = useRef<unknown>(null);
-  const finalWebTranscriptRef = useRef("");
+  const finalTranscriptRef = useRef("");
   const isStoppingRef = useRef(false);
-  const activeSessionIdRef = useRef(0);
 
   const isListening = state === "listening";
 
@@ -112,97 +115,23 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     [onCommand],
   );
 
-  const registerCommandHandler = useCallback((handler: (command: VoiceCommand) => void) => {
-    commandHandlersRef.current.add(handler);
-    return () => {
-      commandHandlersRef.current.delete(handler);
-    };
-  }, []);
+  const registerCommandHandler = useCallback(
+    (handler: (command: VoiceCommand) => void) => {
+      commandHandlersRef.current.add(handler);
+      return () => {
+        commandHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
 
   const setCanvasRef = useCallback((ref: unknown) => {
     canvasRefRef.current = ref;
   }, []);
 
-  const cleanupStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  }, []);
-
-  const resetRecorder = useCallback(() => {
-    mediaRecorderRef.current = null;
-    audioChunksRef.current = [];
-  }, []);
-
   const completeSession = useCallback(() => {
-    cleanupStream();
-    resetRecorder();
     isStoppingRef.current = false;
-  }, [cleanupStream, resetRecorder]);
-
-  const finalizeTranscript = useCallback(
-    async (audioBlob: Blob, sessionId: number) => {
-      setState("processing");
-
-      try {
-        const result = await transcribeVoiceAudio(audioBlob, audioBlob.type);
-        if (activeSessionIdRef.current !== sessionId) {
-          return;
-        }
-
-        const funasrTranscript = result.transcript.trim();
-        const webTranscript = finalWebTranscriptRef.current.trim();
-        const finalText = funasrTranscript || webTranscript;
-
-        if (!finalText) {
-          setTranscript("");
-          setTranscriptSource(null);
-          setInterimTranscript("");
-          setState("idle");
-          return;
-        }
-
-        setTranscript(finalText);
-        setInterimTranscript("");
-        setTranscriptSource(
-          funasrTranscript && webTranscript && funasrTranscript !== webTranscript
-            ? "merged"
-            : funasrTranscript
-              ? "funasr"
-              : "web_api",
-        );
-        setState("idle");
-        notifyCommand(finalText);
-      } catch (transcribeError) {
-        console.error("FUNASR error:", transcribeError);
-        if (activeSessionIdRef.current !== sessionId) {
-          return;
-        }
-
-        const fallbackText = finalWebTranscriptRef.current.trim();
-        if (fallbackText) {
-          setTranscript(fallbackText);
-          setInterimTranscript("");
-          setTranscriptSource("web_api");
-          setState("idle");
-          notifyCommand(fallbackText);
-          return;
-        }
-
-        setError(transcribeError instanceof Error ? transcribeError.message : "语音识别失败");
-        setState("error");
-        window.setTimeout(() => {
-          setState("idle");
-        }, 2000);
-      } finally {
-        if (activeSessionIdRef.current === sessionId) {
-          completeSession();
-        }
-      }
-    },
-    [completeSession, notifyCommand],
-  );
+  }, []);
 
   const ensureWebSpeech = useCallback(() => {
     if (webSpeechRef.current) {
@@ -214,8 +143,8 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
         setInterimTranscript(text);
       },
       onFinal: (text) => {
-        finalWebTranscriptRef.current = `${finalWebTranscriptRef.current}${text}`.trim();
-        setTranscript(finalWebTranscriptRef.current);
+        finalTranscriptRef.current = `${finalTranscriptRef.current}${text}`.trim();
+        setTranscript(finalTranscriptRef.current);
         setInterimTranscript("");
         setTranscriptSource("web_api");
       },
@@ -226,14 +155,26 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
         setError(message);
       },
       onEnd: () => {
-        if (isStoppingRef.current) {
+        // 识别结束：如果有最终文本，派发指令
+        const text = finalTranscriptRef.current.trim();
+        if (text && isStoppingRef.current) {
+          setTranscript(text);
+          setInterimTranscript("");
+          setTranscriptSource("web_api");
+          setState("idle");
+          completeSession();
+          notifyCommand(text);
           return;
+        }
+        if (isStoppingRef.current) {
+          setState("idle");
+          completeSession();
         }
       },
     });
 
     return webSpeechRef.current;
-  }, []);
+  }, [completeSession, notifyCommand]);
 
   const startListening = useCallback(async () => {
     if (state !== "idle") return;
@@ -242,61 +183,29 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     setTranscript("");
     setInterimTranscript("");
     setTranscriptSource(null);
-    finalWebTranscriptRef.current = "";
+    finalTranscriptRef.current = "";
     isStoppingRef.current = false;
-    activeSessionIdRef.current += 1;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000,
-        },
-      });
-      streamRef.current = stream;
-
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "audio/mp4";
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onerror = () => {
-        setError("录音失败");
+      const manager = ensureWebSpeech();
+      const started = manager.start();
+      if (!started) {
+        setError("无法启动语音识别，请检查浏览器兼容性");
         setState("error");
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: mediaRecorder.mimeType || mimeType,
-        });
-        void finalizeTranscript(audioBlob, activeSessionIdRef.current);
-      };
-
-      mediaRecorder.start();
-      ensureWebSpeech().start();
+        window.setTimeout(() => setState("idle"), 2000);
+        return;
+      }
       setState("listening");
     } catch (startError) {
       console.error("Start listening error:", startError);
       completeSession();
-      setError(startError instanceof Error ? startError.message : "无法启动录音");
+      setError(
+        startError instanceof Error ? startError.message : "无法启动录音",
+      );
       setState("error");
-      window.setTimeout(() => {
-        setState("idle");
-      }, 2000);
+      window.setTimeout(() => setState("idle"), 2000);
     }
-  }, [completeSession, ensureWebSpeech, finalizeTranscript, state]);
+  }, [completeSession, ensureWebSpeech, state]);
 
   const stopListening = useCallback(() => {
     if (state !== "listening") {
@@ -306,14 +215,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     isStoppingRef.current = true;
     webSpeechRef.current?.stop();
     setInterimTranscript("");
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    } else {
-      completeSession();
-      setState("idle");
-    }
-  }, [completeSession, state]);
+  }, [state]);
 
   const toggleListening = useCallback(async () => {
     if (isListening) {
@@ -326,9 +228,8 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
   useEffect(() => {
     return () => {
       webSpeechRef.current?.destroy();
-      cleanupStream();
     };
-  }, [cleanupStream]);
+  }, []);
 
   const value: VoiceContextValue = {
     state,
@@ -345,5 +246,7 @@ export function VoiceProvider({ children, onCommand }: VoiceProviderProps) {
     setCanvasRef,
   };
 
-  return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
+  return (
+    <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>
+  );
 }

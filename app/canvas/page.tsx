@@ -610,7 +610,7 @@ function CanvasContent() {
                 当前流程
               </p>
               <p className="mt-1 text-xs font-medium text-text-primary">
-                {"录音 -> Fun-ASR -> Qwen3.7-Max -> Canvas -> 自动保存 -> 高级生成可选"}
+                {"录音(Web Speech API) -> Qwen3.7-Max 解析意图 -> Canvas 绘制 -> 自动保存 -> 高级生成可选"}
               </p>
             </div>
 

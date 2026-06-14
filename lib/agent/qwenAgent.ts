@@ -1,4 +1,5 @@
 import { dashScopeFetch } from "@/lib/dashscope/client";
+import { getLlmModel, getLlmTemperature, getLlmMaxTokens } from "@/lib/api/config";
 import type { IntentResult } from "@/lib/voice/speechRecognition";
 
 const AGENT_SYSTEM_PROMPT = `你是一个智能绘图助手 Agent，负责理解用户的语音输入并转换为画布操作指令。
@@ -120,6 +121,10 @@ export interface AgentResponse {
 export async function processWithQwenAgent(
   transcript: string,
 ): Promise<AgentResponse> {
+  const model = getLlmModel();
+  const temperature = getLlmTemperature();
+  const maxTokens = getLlmMaxTokens();
+
   const response = await dashScopeFetch(
     "/api/v1/services/aigc/text-generation/generation",
     {
@@ -128,7 +133,7 @@ export async function processWithQwenAgent(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "qwen-plus",
+        model,
         input: {
           messages: [
             { role: "system", content: AGENT_SYSTEM_PROMPT },
@@ -137,7 +142,8 @@ export async function processWithQwenAgent(
         },
         parameters: {
           result_format: "message",
-          temperature: 0.3,
+          temperature,
+          max_tokens: maxTokens,
           top_p: 0.9,
         },
       }),
@@ -170,6 +176,8 @@ export async function processWithQwenAgent(
 export async function enhanceImagePrompt(
   originalPrompt: string,
 ): Promise<string> {
+  const model = getLlmModel();
+
   const response = await dashScopeFetch(
     "/api/v1/services/aigc/text-generation/generation",
     {
@@ -178,7 +186,7 @@ export async function enhanceImagePrompt(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "qwen-plus",
+        model,
         input: {
           messages: [
             {
@@ -199,4 +207,89 @@ export async function enhanceImagePrompt(
 
   const data = await response.json();
   return data?.output?.choices?.[0]?.message?.content || originalPrompt;
+}
+
+export async function processWithQwenAgentStream(
+  transcript: string,
+  onChunk?: (chunk: string) => void,
+): Promise<AgentResponse> {
+  const model = getLlmModel();
+  const temperature = getLlmTemperature();
+  const maxTokens = getLlmMaxTokens();
+
+  const response = await dashScopeFetch(
+    "/api/v1/services/aigc/text-generation/generation",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        input: {
+          messages: [
+            { role: "system", content: AGENT_SYSTEM_PROMPT },
+            { role: "user", content: transcript },
+          ],
+        },
+        parameters: {
+          result_format: "message",
+          temperature,
+          max_tokens: maxTokens,
+          top_p: 0.9,
+          stream: true,
+        },
+      }),
+    },
+  );
+
+  if (!response.body) {
+    throw new Error("Stream response body is null");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let fullContent = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split("\n").filter(Boolean);
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            const content = data?.output?.choices?.[0]?.message?.content;
+            if (content) {
+              fullContent += content;
+              onChunk?.(fullContent);
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const cleanedContent = fullContent
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const intent = JSON.parse(cleanedContent) as IntentResult;
+
+  return {
+    intent: {
+      ...intent,
+      transcript,
+    },
+    raw: fullContent,
+  };
 }

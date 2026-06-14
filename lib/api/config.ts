@@ -1,8 +1,9 @@
 const DEFAULT_STORAGE_BUCKET = "voice";
 const DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com";
 const DEFAULT_APP_BASE_URL = "http://localhost:3000";
-const DEFAULT_FUNASR_MODEL = "auto";
-const DEFAULT_FUNASR_LANGUAGE_HINTS = "zh,en,ja,ko";
+const DEFAULT_LLM_MODEL = "qwen3.7-max";
+const DEFAULT_LLM_TEMPERATURE = 0.7;
+const DEFAULT_LLM_MAX_TOKENS = 4096;
 
 export function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -30,21 +31,17 @@ export function getDashScopeApiKey(): string | null {
   return process.env.DASHSCOPE_API_KEY || null;
 }
 
-export function getFunAsrApiUrl(): string | null {
-  return process.env.FUNASR_API_URL || null;
+// LLM 模型配置
+export function getLlmModel(): string {
+  return process.env.LLM_MODEL || DEFAULT_LLM_MODEL;
 }
 
-export function getFunAsrApiKey(): string | null {
-  return process.env.FUNASR_API_KEY || null;
+export function getLlmTemperature(): number {
+  const temp = parseFloat(process.env.LLM_TEMPERATURE || "");
+  return isNaN(temp) ? DEFAULT_LLM_TEMPERATURE : temp;
 }
 
-export function getFunAsrModel(): string {
-  return process.env.FUNASR_MODEL || DEFAULT_FUNASR_MODEL;
-}
-
-export function getFunAsrLanguageHints(): string[] {
-  return (process.env.FUNASR_LANGUAGE_HINTS || DEFAULT_FUNASR_LANGUAGE_HINTS)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+export function getLlmMaxTokens(): number {
+  const tokens = parseInt(process.env.LLM_MAX_TOKENS || "", 10);
+  return isNaN(tokens) ? DEFAULT_LLM_MAX_TOKENS : tokens;
 }

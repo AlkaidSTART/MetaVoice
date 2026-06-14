@@ -9,6 +9,7 @@ interface TranscriptBarProps {
   transcript: string;
   interimTranscript?: string;
   voiceState: VoiceState;
+  error?: string | null;
 }
 
 const SHAPE_KEYWORDS = [
@@ -24,6 +25,7 @@ export default function TranscriptBar({
   transcript,
   interimTranscript = "",
   voiceState,
+  error = null,
 }: TranscriptBarProps) {
   // ── keyword highlighting ──
 
@@ -150,10 +152,11 @@ export default function TranscriptBar({
         )}
 
         {/* processing */}
-        {voiceState === "processing" && (
-          <span className="text-text-secondary italic">
-            正在解析画图指令...
-          </span>
+        {voiceState === "processing" && transcript && (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-macaron-blue font-bold mr-1 text-xs">处理中：</span>
+            {highlightedContent}
+          </div>
         )}
 
         {/* error */}
@@ -162,10 +165,13 @@ export default function TranscriptBar({
             {highlightedContent}
           </div>
         )}
+        {voiceState === "error" && !transcript && error && (
+          <span className="text-[#D04D43]">{error}</span>
+        )}
       </div>
 
       {/* source badge */}
-      {voiceState !== "idle" && transcript && (
+      {voiceState !== "idle" && (transcript || interimTranscript) && (
         <div className="ml-4 shrink-0 rounded-full border border-border-custom bg-surface px-2.5 py-1 text-[11px] font-bold text-text-secondary">
           Web Speech API
         </div>

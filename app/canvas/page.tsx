@@ -74,6 +74,7 @@ function CanvasContent() {
     state: voiceState,
     transcript,
     interimTranscript,
+    error: voiceError,
     startListening,
     stopListening,
     confirmTranscript,
@@ -664,6 +665,7 @@ function CanvasContent() {
               transcript={transcript}
               interimTranscript={interimTranscript}
               voiceState={voiceState}
+              error={voiceError}
             />
 
             {/* 确认/取消按钮：voiceState === "ready" 时展示 */}
@@ -699,7 +701,11 @@ function CanvasContent() {
                 {credits < 1
                   ? "积分不足，无法继续录音"
                   : voiceState === "listening"
-                    ? "说出绘图命令，说完后再次点击按钮"
+                    ? "正在实时转写，说完后再次点击按钮结束"
+                    : voiceState === "ready"
+                      ? "请先确认识别文字，再进入下一步"
+                      : voiceState === "processing"
+                        ? "已确认，正在进入下一步流程"
                     : "点击按钮开始说话"}
               </span>
             </div>

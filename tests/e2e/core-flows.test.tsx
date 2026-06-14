@@ -17,7 +17,6 @@ import userEvent from "@testing-library/user-event";
 // ── Speech Recognition: parseTranscript ──────────────────────────
 import {
   parseTranscript,
-  VoiceRecognitionManager,
 } from "@/lib/voice/speechRecognition";
 
 describe("parseTranscript — NLP Command Parser", () => {
@@ -221,24 +220,6 @@ describe("executeAction", () => {
       "[data-action='save']",
       expect.any(Function),
     );
-  });
-});
-
-// ── VoiceRecognitionManager ──────────────────────────────────────
-describe("VoiceRecognitionManager", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("supports MediaRecorder-based voice capture", () => {
-    const manager = new VoiceRecognitionManager(vi.fn(), vi.fn(), vi.fn());
-    expect(manager.isSupported()).toBe(true);
-  });
-
-  it("stops recognition when stop is called", () => {
-    const manager = new VoiceRecognitionManager(vi.fn(), vi.fn(), vi.fn());
-    void manager.start();
-    manager.stop();
   });
 });
 

@@ -11,10 +11,10 @@ export default function GlobalVoiceControl() {
 
   const {
     state,
-    isListening,
-    toggleListening,
     transcript,
     error,
+    startListening,
+    stopListening,
   } = useVoiceContext();
 
   // Canvas 页面有自己的麦克风按钮，不显示全局控制
@@ -25,6 +25,7 @@ export default function GlobalVoiceControl() {
   const labelMap: Record<string, string> = {
     idle: "语音唤醒",
     listening: "聆听中...",
+    ready: "请确认",
     processing: "处理中...",
     error: "出错了",
   };
@@ -32,11 +33,20 @@ export default function GlobalVoiceControl() {
   const iconMap: Record<string, React.ReactNode> = {
     idle: <Ear className="w-5 h-5" />,
     listening: <Mic className="w-5 h-5" />,
+    ready: <Mic className="w-5 h-5" />,
     processing: <Sparkles className="w-5 h-5" />,
     error: <Mic className="w-5 h-5" />,
   };
 
-  const active = isListening || state === "processing";
+  const active = state === "listening" || state === "processing";
+
+  const handleToggle = () => {
+    if (state === "listening") {
+      stopListening();
+    } else if (state === "idle" || state === "ready" || state === "error") {
+      startListening();
+    }
+  };
 
   return (
     <div className="fixed bottom-6 right-6 z-9998 flex flex-col items-center gap-1.5">
@@ -50,6 +60,7 @@ export default function GlobalVoiceControl() {
       >
         {state === "idle" && '点击开始语音'}
         {state === "listening" && "请说出指令..."}
+        {state === "ready" && "请确认识别结果"}
         {state === "processing" && "处理中..."}
         {state === "error" && (error || "出错了")}
       </div>
@@ -64,7 +75,7 @@ export default function GlobalVoiceControl() {
       {/* 麦克风按钮 */}
       <button
         data-action="mic"
-        onClick={toggleListening}
+        onClick={handleToggle}
         disabled={state === "processing"}
         className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 active:scale-90 disabled:opacity-50 ${
           active

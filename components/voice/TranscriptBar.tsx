@@ -3,83 +3,42 @@
 import { useMemo } from "react";
 import { MessageSquare } from "lucide-react";
 import { COLOR_MAP } from "@/lib/voice/speechRecognition";
-import type { TranscriptSource } from "@/lib/voice/VoiceContext";
+import type { VoiceState } from "@/lib/voice/VoiceContext";
 
 interface TranscriptBarProps {
   transcript: string;
   interimTranscript?: string;
-  transcriptSource?: TranscriptSource | null;
-  isRecording: boolean;
-  isProcessing: boolean;
-  stage?: string;
+  voiceState: VoiceState;
 }
 
 const SHAPE_KEYWORDS = [
-  "圆形",
-  "圆形在",
-  "矩形",
-  "方形",
-  "正方形",
-  "长方形",
-  "方块",
-  "直线",
-  "线条",
-  "线",
-  "三角形",
-  "五角星",
-  "星星",
-  "星",
-  "圆",
+  "圆形", "圆形在", "矩形", "方形", "正方形", "长方形", "方块",
+  "直线", "线条", "线", "三角形", "五角星", "星星", "星", "圆",
 ];
 const ACTION_KEYWORDS = [
-  "撤销",
-  "重做",
-  "清空",
-  "清除",
-  "重新开始",
-  "保存",
-  "存下来",
-  "导出",
-  "下载",
-  "写上",
-  "写下",
-  "打字",
-  "文字",
+  "撤销", "重做", "清空", "清除", "重新开始", "保存", "存下来",
+  "导出", "下载", "写上", "写下", "打字", "文字",
 ];
 
 export default function TranscriptBar({
   transcript,
   interimTranscript = "",
-  transcriptSource = null,
-  isRecording,
-  isProcessing,
-  stage = "",
+  voiceState,
 }: TranscriptBarProps) {
-  const sourceLabelMap: Record<TranscriptSource, string> = {
-    web_api: "Web Speech API",
-  };
-  const sourceLabel = transcriptSource ? sourceLabelMap[transcriptSource] : "";
+  // ── keyword highlighting ──
 
-  // Custom keyword highlighter to make it premium
   const highlightedContent = useMemo(() => {
     if (!transcript) return null;
 
-    // Highlight colors
     const colors = Object.keys(COLOR_MAP);
-
-    // We will do a simple scan and split replacement
-    // To make it easy and safe, we can run regex replacements with markers, then map to elements
     let text = transcript;
 
-    // Replace colors: wrap in [C:colorName]
     colors.forEach((color) => {
       const regex = new RegExp(`(${color})`, "g");
       text = text.replace(regex, "[C:$1]");
     });
 
-    // Replace shapes: wrap in [S:shapeName]
     SHAPE_KEYWORDS.forEach((shape) => {
-      // Avoid breaking already matched tags
       const regex = new RegExp(
         `(?<!\\[C:[^\\]]*|\\b)(${shape})(?![^\\[]*\\])`,
         "g",
@@ -87,7 +46,6 @@ export default function TranscriptBar({
       text = text.replace(regex, "[S:$1]");
     });
 
-    // Replace actions: wrap in [A:actionName]
     ACTION_KEYWORDS.forEach((action) => {
       const regex = new RegExp(
         `(?<!\\[[CS]:[^\\]]*|\\b)(${action})(?![^\\[]*\\])`,
@@ -96,7 +54,6 @@ export default function TranscriptBar({
       text = text.replace(regex, "[A:$1]");
     });
 
-    // Parse the bracketed string into react elements
     const parts = text.split(/(\[[CSA]:[^\]]+\])/g);
 
     return parts.map((part, idx) => {
@@ -112,7 +69,8 @@ export default function TranscriptBar({
             {colorName}
           </span>
         );
-      } else if (part.startsWith("[S:") && part.endsWith("]")) {
+      }
+      if (part.startsWith("[S:") && part.endsWith("]")) {
         const shapeName = part.substring(3, part.length - 1);
         return (
           <span
@@ -122,7 +80,8 @@ export default function TranscriptBar({
             {shapeName}
           </span>
         );
-      } else if (part.startsWith("[A:") && part.endsWith("]")) {
+      }
+      if (part.startsWith("[A:") && part.endsWith("]")) {
         const actionName = part.substring(3, part.length - 1);
         return (
           <span
@@ -133,12 +92,13 @@ export default function TranscriptBar({
           </span>
         );
       }
-
       return <span key={idx}>{part}</span>;
     });
   }, [transcript]);
 
-  if (!transcript && !interimTranscript && !isRecording && !isProcessing) {
+  // ── empty state ──
+
+  if (!transcript && !interimTranscript && voiceState === "idle") {
     return (
       <div
         className="w-full max-w-2xl mx-auto h-12 flex items-center justify-center text-text-secondary text-sm italic border border-border-custom/40 rounded-2xl bg-white/50 backdrop-blur-md px-6 select-none"
@@ -151,71 +111,74 @@ export default function TranscriptBar({
     );
   }
 
+  // ── active bar ──
+
   return (
     <div
       className="w-full max-w-2xl mx-auto min-h-12 flex items-center justify-between border border-border-custom/70 rounded-2xl bg-white/95 backdrop-blur-md shadow-sm px-6 py-3 transition-standard select-none animate-slide-up"
       role="status"
       aria-live="polite"
       aria-atomic="false"
-      aria-label="实时语音字幕条"
+      aria-label="语音字幕条"
     >
       <div className="flex-1 text-sm font-medium leading-relaxed text-text-primary">
-        {isRecording && !transcript && !interimTranscript && (
-          <span className="text-text-secondary transcript-cursor italic">
+        {/* listening + no text yet */}
+        {voiceState === "listening" && !transcript && !interimTranscript && (
+          <span className="text-text-secondary italic">
             正在倾听...
             <span className="inline-block w-0.5 h-4 bg-sakura ml-1 animate-blink align-middle" />
           </span>
         )}
-        {isRecording && (transcript || interimTranscript) && (
-          <span className="text-text-secondary transcript-cursor">
+
+        {/* listening + has text */}
+        {voiceState === "listening" && (transcript || interimTranscript) && (
+          <span className="text-text-secondary">
             {highlightedContent}
             {interimTranscript && (
-              <span className="text-sakura font-normal">
-                {interimTranscript}
-              </span>
+              <span className="text-sakura font-normal">{interimTranscript}</span>
             )}
             <span className="inline-block w-0.5 h-4 bg-sakura ml-1 animate-blink align-middle" />
           </span>
         )}
-        {!isRecording && isProcessing && (
+
+        {/* ready – show final text with confirmation hint */}
+        {voiceState === "ready" && transcript && (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-sakura font-bold mr-1 text-xs">请确认：</span>
+            {highlightedContent}
+          </div>
+        )}
+
+        {/* processing */}
+        {voiceState === "processing" && (
           <span className="text-text-secondary italic">
-            {stage || "正在解析画图指令..."}
+            正在解析画图指令...
           </span>
         )}
-        {!isRecording && !isProcessing && transcript && (
+
+        {/* error */}
+        {voiceState === "error" && transcript && (
           <div className="flex flex-wrap items-center gap-1">
-            <span className="text-text-secondary mr-1">
-              {stage ? `${stage}：` : "用户输入:"}
-            </span>
             {highlightedContent}
           </div>
         )}
       </div>
 
-      {!!sourceLabel && !isRecording && transcript && (
+      {/* source badge */}
+      {voiceState !== "idle" && transcript && (
         <div className="ml-4 shrink-0 rounded-full border border-border-custom bg-surface px-2.5 py-1 text-[11px] font-bold text-text-secondary">
-          {sourceLabel}
+          Web Speech API
         </div>
       )}
 
       <style jsx global>{`
         @keyframes slide-up {
-          from {
-            transform: translateY(12px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
+          from { transform: translateY(12px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
         }
         @keyframes blink {
-          0%, 50% {
-            opacity: 1;
-          }
-          51%, 100% {
-            opacity: 0;
-          }
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
         }
         .animate-slide-up {
           animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;

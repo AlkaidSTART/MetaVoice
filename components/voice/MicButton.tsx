@@ -156,7 +156,7 @@ export default function MicButton({ state, onClick, disabled = false }: MicButto
         onClick={onClick}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
-        disabled={disabled || state === "processing"}
+        disabled={disabled}
         className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-sakura/50 z-10 ${btnStyles} ${
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
         }`}

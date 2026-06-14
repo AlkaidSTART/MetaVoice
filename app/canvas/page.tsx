@@ -36,6 +36,7 @@ import {
   processWithAgent,
 } from "@/lib/api/voice";
 import { createClient } from "@/lib/supabase/client";
+import { saveArtwork, downloadDataUrl } from "@/lib/db/artworkStore";
 
 interface UserProfile {
   id: string;
@@ -44,17 +45,6 @@ interface UserProfile {
   avatarUrl?: string;
   isLoggedIn: boolean;
 }
-
-type FlowStage =
-  | ""
-  | "正在录音"
-  | "正在识别语音"
-  | "请确认识别文本"
-  | "正在解析指令"
-  | "正在绘制草图"
-  | "正在自动保存 PNG"
-  | "等待高级生成"
-  | "正在生成高级图片";
 
 function CanvasContent() {
   const router = useRouter();
@@ -66,10 +56,6 @@ function CanvasContent() {
   const [artworkId, setArtworkId] = useState<string | null>(null);
   const [artworkTitle, setArtworkTitle] = useState("未命名画作");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [micState, setMicState] = useState<MicState>("idle");
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [flowStage, setFlowStage] = useState<FlowStage>("");
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isIntentModalOpen, setIsIntentModalOpen] = useState(false);
   const [currentIntent, setCurrentIntent] = useState<IntentResult | null>(null);
@@ -83,19 +69,28 @@ function CanvasContent() {
 
   const canvasRef = useRef<CanvasBoardRef>(null);
   const canvasAgentRef = useRef<CanvasAgent | null>(null);
-  // 使用全局语音控制
+  // 使用全局语音控制（唯一状态源）
   const {
     state: voiceState,
-    isListening,
     transcript,
     interimTranscript,
-    transcriptSource,
     startListening,
     stopListening,
     confirmTranscript,
     cancelTranscript,
+    resetToIdle,
     registerCommandHandler,
   } = useVoiceContext();
+
+  // MicButton state 直接从 voiceState 派生
+  const micState: MicState =
+    voiceState === "listening"
+      ? "recording"
+      : voiceState === "processing"
+        ? "processing"
+        : voiceState === "error"
+          ? "error"
+          : "idle";
 
   const addToast = (message: string, type: ToastType = "info") => {
     const id = `toast_${Math.random().toString(36).slice(2, 9)}`;
@@ -104,12 +99,6 @@ function CanvasContent() {
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  };
-
-  const setIdleState = () => {
-    setIsProcessing(false);
-    setFlowStage("");
-    setMicState("idle");
   };
 
   const refreshCredits = async () => {
@@ -262,42 +251,34 @@ function CanvasContent() {
 
   const processTranscript = async (text: string) => {
     if (!text.trim()) {
-      setIdleState();
+      resetToIdle();
       return;
     }
 
     const matched = matchVoiceToAction(text);
     if (matched) {
-      setMicState("success");
       executeAction(matched.action);
-      setTimeout(() => setMicState("idle"), 800);
-      setIsProcessing(false);
-      setFlowStage("");
+      addToast(`已执行: ${matched.action.label}`, "success");
+      resetToIdle();
       return;
     }
 
     try {
-      setFlowStage("正在解析指令");
-
-      // 使用 Agent 处理语音输入
+      // 使用 Qwen Agent 处理语音输入
       const agentResult = await processWithAgent(text);
       const intent = agentResult.intent;
       setCurrentIntent(intent);
 
       if (intent.type === "control" && intent.canvasOp) {
         await handleControlIntent(intent);
-        setMicState("success");
-        setIsProcessing(false);
-        setFlowStage("");
-        setTimeout(() => setMicState("idle"), 800);
+        resetToIdle();
         return;
       }
 
-      setFlowStage("正在绘制草图");
       await applyIntentToCanvas(intent);
       setCanvasMode("canvas");
 
-      setFlowStage("正在自动保存 PNG");
+      // 自动保存 PNG
       const dataUrl = await saveCurrentArtwork(false);
       if (!dataUrl) {
         throw new Error("Auto-save failed");
@@ -305,17 +286,11 @@ function CanvasContent() {
 
       setPendingImageSource(dataUrl);
       setIsIntentModalOpen(true);
-      setFlowStage("等待高级生成");
-      setMicState("success");
-      setIsProcessing(false);
-      setTimeout(() => setMicState("idle"), 800);
+      resetToIdle();
     } catch (error) {
       console.error(error);
-      setMicState("error");
-      setIsProcessing(false);
-      setFlowStage("");
       addToast("语音指令处理失败，请再试一次。", "error");
-      setTimeout(() => setMicState("idle"), 1200);
+      resetToIdle();
     }
   };
 
@@ -375,9 +350,6 @@ function CanvasContent() {
 
     try {
       setIsIntentModalOpen(false);
-      setIsProcessing(true);
-      setMicState("processing");
-      setFlowStage("正在生成高级图片");
 
       const result = await generateImage(
         currentIntent.imagePrompt || currentIntent.transcript,
@@ -391,6 +363,22 @@ function CanvasContent() {
       const finalImageUrl = result.storageUrl || result.imageUrl;
       await canvasRef.current?.addShape("image", "#FFFFFF", "center", "large", finalImageUrl);
       setCanvasMode("ai_generate");
+
+      // 获取 canvas 当前 PNG
+      const dataUrl = canvasRef.current?.exportImage();
+      if (dataUrl) {
+        // 保存到 IndexedDB
+        await saveArtwork({
+          title: artworkTitle,
+          dataUrl,
+          canvasJson: JSON.stringify(canvasRef.current?.getShapesData() ?? []),
+          type: "ai_generate",
+        });
+        // 自动下载
+        downloadDataUrl(dataUrl, `${artworkTitle || "voicecanvas"}.png`);
+      }
+
+      // 同时保存到 Supabase
       await saveCurrentArtwork(false);
 
       canvasConfetti({
@@ -399,18 +387,10 @@ function CanvasContent() {
         origin: { y: 0.7 },
       });
 
-      addToast("高级图片生成成功", "success");
-      setMicState("success");
-      setIsProcessing(false);
-      setFlowStage("");
-      setTimeout(() => setMicState("idle"), 1000);
+      addToast("高级图片已生成并保存到本地", "success");
     } catch (error) {
       console.error(error);
-      setMicState("error");
-      setIsProcessing(false);
-      setFlowStage("");
       addToast("高级图片生成失败", "error");
-      setTimeout(() => setMicState("idle"), 1200);
       await refreshCredits();
     }
   };
@@ -418,83 +398,22 @@ function CanvasContent() {
   // 注册语音指令处理器
   useEffect(() => {
     const handleCommand = async (command: VoiceCommand) => {
-      setIsRecording(false);
-      setMicState("processing");
-      setFlowStage("正在解析指令");
-      
-      // 如果是绘制或 AI 生成指令，调用 processTranscript
-      if (command.type === "draw" || command.type === "ai_generate" || command.type === "unknown") {
-        await processTranscript(command.raw);
-      } else if (command.type === "control") {
-        // 控制指令直接执行
-        const matched = matchVoiceToAction(command.raw);
-        if (matched) {
-          executeAction(matched.action);
-          setMicState("success");
-          setTimeout(() => setMicState("idle"), 800);
-        }
-        setFlowStage("");
-      }
+      await processTranscript(command.raw);
     };
 
     return registerCommandHandler(handleCommand);
   }, [registerCommandHandler, processTranscript]);
 
-  // 同步 voiceState 到 UI 状态
-  useEffect(() => {
-    if (voiceState === "ready") {
-      // Web Speech API 识别完成，展示文本等待确认
-      setIsRecording(false);
-      setIsProcessing(false);
-      setMicState("idle");
-      setFlowStage("请确认识别文本");
-    } else if (voiceState === "processing") {
-      // 用户已确认，开始处理
-      setMicState("processing");
-      setFlowStage("正在解析指令");
-    } else if (voiceState === "idle" && !isListening && !isProcessing) {
-      // 空闲状态
-      setMicState("idle");
-      setFlowStage("");
-    }
-  }, [voiceState, isListening, isProcessing]);
-
   const handleMicTrigger = async () => {
-    if (isListening) {
-      // 停止录音（Web Speech API stop → onEnd → ready 状态）
+    if (voiceState === "listening") {
       stopListening();
-      setIsRecording(false);
       return;
     }
-
-    // 如果在 ready 状态点击麦克风，先取消当前文本
+    // 如果在 ready 状态点击麦克风，先取消再重新录音
     if (voiceState === "ready") {
       cancelTranscript();
     }
-
-    // 开始录音
-    setIsRecording(true);
-    setMicState("recording");
-    setFlowStage("正在录音");
-    
-    try {
-      await startListening();
-    } catch {
-      addToast("无法启动语音识别，请检查麦克风权限", "error");
-      setMicState("error");
-      setFlowStage("");
-      setTimeout(() => setMicState("idle"), 1200);
-    }
-  };
-
-  const handleConfirmTranscript = () => {
-    confirmTranscript();
-  };
-
-  const handleCancelTranscript = () => {
-    cancelTranscript();
-    setMicState("idle");
-    setFlowStage("");
+    startListening();
   };
 
   const handleLogout = async () => {
@@ -521,7 +440,6 @@ function CanvasContent() {
         onConfirm={handleAdvancedGenerate}
         onClose={() => {
           setIsIntentModalOpen(false);
-          setFlowStage("");
         }}
       />
 
@@ -745,10 +663,7 @@ function CanvasContent() {
             <TranscriptBar
               transcript={transcript}
               interimTranscript={interimTranscript}
-              transcriptSource={transcriptSource}
-              isRecording={isRecording}
-              isProcessing={isProcessing}
-              stage={flowStage}
+              voiceState={voiceState}
             />
 
             {/* 确认/取消按钮：voiceState === "ready" 时展示 */}
@@ -756,14 +671,14 @@ function CanvasContent() {
               <div className="flex items-center justify-center gap-3 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <button
                   type="button"
-                  onClick={handleCancelTranscript}
+                  onClick={cancelTranscript}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-white border border-border-custom text-text-secondary hover:bg-gray-50 transition-colors"
                 >
                   取消
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmTranscript}
+                  onClick={confirmTranscript}
                   className="px-5 py-2 text-sm font-bold rounded-lg bg-sakura text-white hover:bg-sakura/90 transition-colors shadow-sm"
                 >
                   确认执行
@@ -777,13 +692,13 @@ function CanvasContent() {
             >
               <MicButton
                 state={micState}
-                onClick={() => void handleMicTrigger()}
-                disabled={isProcessing || credits < 1}
+                onClick={handleMicTrigger}
+                disabled={voiceState === "processing" || credits < 1}
               />
               <span className="text-[10px] font-bold text-text-disabled mt-1 text-center">
                 {credits < 1
                   ? "积分不足，无法继续录音"
-                  : isRecording
+                  : voiceState === "listening"
                     ? "说出绘图命令，说完后再次点击按钮"
                     : "点击按钮开始说话"}
               </span>

@@ -23,14 +23,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (!getFunAsrApiUrl()) {
-      const charged = await chargeCredits(user.id, 1);
-      return NextResponse.json({
-        transcript: "画一个红色的圆形在中间",
-        credits: charged.credits,
-        warning: charged.fallback
-          ? "Database unavailable, using local development credits."
-          : "FUNASR_API_URL environment variable is not defined. Falling back to local mock.",
-      });
+      return NextResponse.json(
+        {
+          error: "FUNASR_API_URL environment variable is not defined.",
+        },
+        { status: 503 },
+      );
     }
 
     const data = await transcribeAudioFile(audioFile);

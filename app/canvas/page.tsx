@@ -27,7 +27,7 @@ import {
   type IntentResult,
 } from "@/lib/voice/speechRecognition";
 import { CanvasAgent } from "@/lib/voice/canvasAgent";
-import { WebSpeechRecognitionManager } from "@/lib/voice/webSpeechRecognition";
+import { useVoiceContext, type VoiceCommand } from "@/lib/voice/VoiceContext";
 import { executeAction, matchVoiceToAction } from "@/lib/voice/voiceActionMapper";
 import { fetchArtwork, saveArtworkViaApi } from "@/lib/api/artworks";
 import {
@@ -83,8 +83,15 @@ function CanvasContent() {
 
   const canvasRef = useRef<CanvasBoardRef>(null);
   const canvasAgentRef = useRef<CanvasAgent | null>(null);
-  const webSpeechRef = useRef<WebSpeechRecognitionManager | null>(null);
   const [interimTranscript, setInterimTranscript] = useState("");
+
+  // 使用全局语音控制
+  const {
+    isListening,
+    startListening,
+    stopListening,
+    registerCommandHandler,
+  } = useVoiceContext();
 
   const addToast = (message: string, type: ToastType = "info") => {
     const id = `toast_${Math.random().toString(36).slice(2, 9)}`;
@@ -404,115 +411,52 @@ function CanvasContent() {
     }
   };
 
-  const handleMicTrigger = async () => {
-    if (isRecording) {
-      // 停止录音
-      webSpeechRef.current?.stop();
-      setIsRecording(false);
-      setInterimTranscript("");
-
-      // 如果有最终文本，处理它
-      if (transcript.trim()) {
-        setIsProcessing(true);
-        setMicState("processing");
-        setFlowStage("正在解析指令");
-        await processTranscript(transcript);
-      } else {
-        setMicState("idle");
+  // 注册语音指令处理器
+  useEffect(() => {
+    const handleCommand = async (command: VoiceCommand) => {
+      setMicState("processing");
+      setFlowStage("正在解析指令");
+      
+      // 如果是绘制或 AI 生成指令，调用 processTranscript
+      if (command.type === "draw" || command.type === "ai_generate" || command.type === "unknown") {
+        await processTranscript(command.raw);
+      } else if (command.type === "control") {
+        // 控制指令直接执行
+        const matched = matchVoiceToAction(command.raw);
+        if (matched) {
+          executeAction(matched.action);
+          setMicState("success");
+          setTimeout(() => setMicState("idle"), 800);
+        }
         setFlowStage("");
       }
+    };
+
+    return registerCommandHandler(handleCommand);
+  }, [registerCommandHandler, processTranscript]);
+
+  const handleMicTrigger = async () => {
+    if (isListening) {
+      // 停止录音
+      stopListening();
+      setIsRecording(false);
+      setInterimTranscript("");
+      setMicState("idle");
+      setFlowStage("");
       return;
     }
 
     // 开始录音
     setTranscript("");
     setInterimTranscript("");
-    setFlowStage("正在录音");
     setIsRecording(true);
     setMicState("recording");
-
-    if (
-      typeof window !== "undefined" &&
-      window.isSecureContext === false &&
-      window.location.hostname !== "localhost" &&
-      window.location.hostname !== "127.0.0.1"
-    ) {
-      addToast("语音识别需要在 HTTPS 或 localhost 环境中使用。", "error");
-      setIsRecording(false);
-      setMicState("error");
-      setFlowStage("");
-      setTimeout(() => setMicState("idle"), 1200);
-      return;
-    }
-
-    // 使用 Web Speech API 进行实时语音识别
-    webSpeechRef.current?.destroy();
-    const webSpeechManager = new WebSpeechRecognitionManager({
-      onInterim: (text) => {
-        // 实时显示用户正在说的内容
-        setInterimTranscript(text);
-      },
-      onFinal: (text) => {
-        // 累积最终识别结果
-        setTranscript((prev) => prev + text);
-        setInterimTranscript("");
-      },
-      onError: (error) => {
-        console.error("Web Speech API error:", error);
-        setIsRecording(false);
-        setMicState("error");
-        setFlowStage("");
-        
-        // 如果是网络错误，提供备用输入方式
-        if (error.includes("网络") || error.includes("network")) {
-          const simulatedText = prompt(
-            "语音识别网络连接失败，请手动输入绘画指令：",
-          );
-          if (simulatedText) {
-            setTranscript(simulatedText);
-            setIsProcessing(true);
-            setMicState("processing");
-            setFlowStage("正在解析指令");
-            processTranscript(simulatedText);
-            return;
-          }
-        }
-        
-        addToast(error || "语音识别失败，请重试", "error");
-        setTimeout(() => setMicState("idle"), 1200);
-      },
-      onEnd: () => {
-        // Web Speech API 自动结束时（如静音检测）
-        setIsRecording(false);
-        setInterimTranscript("");
-
-        // 如果有识别结果，自动处理
-        if (transcript.trim()) {
-          setIsProcessing(true);
-          setMicState("processing");
-          setFlowStage("正在解析指令");
-          processTranscript(transcript);
-        } else {
-          setMicState("idle");
-          setFlowStage("");
-        }
-      },
-    });
-    webSpeechRef.current = webSpeechManager;
-
-    if (!webSpeechManager.isSupported()) {
-      addToast("您的浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器", "error");
-      setIsRecording(false);
-      setMicState("error");
-      setFlowStage("");
-      setTimeout(() => setMicState("idle"), 1200);
-      return;
-    }
-
-    const started = webSpeechManager.start();
-    if (!started) {
+    setFlowStage("正在录音");
+    
+    try {
+      await startListening();
+    } catch {
       addToast("无法启动语音识别，请检查麦克风权限", "error");
-      setIsRecording(false);
       setMicState("error");
       setFlowStage("");
       setTimeout(() => setMicState("idle"), 1200);

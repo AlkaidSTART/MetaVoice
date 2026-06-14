@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import CustomCursor from "@/components/ui/CustomCursor";
 import GlobalVoiceControl from "@/components/voice/GlobalVoiceControl";
+import { VoiceProvider } from "@/lib/voice/VoiceContext";
 
 export const metadata: Metadata = {
   title: "VoiceCanvas · 用声音创作你的世界",
@@ -17,9 +18,11 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="h-full flex flex-col bg-surface text-text-primary selection:bg-sakura/30 overflow-hidden">
-        <CustomCursor />
-        <GlobalVoiceControl />
-        {children}
+        <VoiceProvider>
+          <CustomCursor />
+          <GlobalVoiceControl />
+          {children}
+        </VoiceProvider>
       </body>
     </html>
   );

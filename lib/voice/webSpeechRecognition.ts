@@ -82,14 +82,20 @@ export class WebSpeechRecognitionManager {
       this.recognition.interimResults = true;
       this.recognition.lang = "zh-CN";
       this.recognition.maxAlternatives = 1;
+      this.recognition.maxResults = 10;
 
       this.recognition.onresult = (event: SpeechRecognitionEvent) => {
         let interimTranscript = "";
         let finalTranscript = "";
 
+        console.log("语音识别结果事件:", event);
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
+          const result = event.results[i];
+          console.log(`结果 ${i}: isFinal=${result.isFinal}, transcript=${result[0].transcript}`);
+          
+          const transcript = result[0].transcript;
+          if (result.isFinal) {
             finalTranscript += transcript;
           } else {
             interimTranscript += transcript;
@@ -97,10 +103,12 @@ export class WebSpeechRecognitionManager {
         }
 
         if (interimTranscript) {
+          console.log("触发 onInterim:", interimTranscript);
           this.callbacks.onInterim(interimTranscript);
         }
 
         if (finalTranscript) {
+          console.log("触发 onFinal:", finalTranscript);
           this.callbacks.onFinal(finalTranscript);
         }
       };

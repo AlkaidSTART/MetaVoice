@@ -1,5 +1,7 @@
 "use client";
 
+// ---------- Browser SpeechRecognition type shim ----------
+
 interface SpeechRecognitionResult {
   isFinal: boolean;
   [index: number]: {
@@ -27,6 +29,7 @@ interface SpeechRecognitionInstance {
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
+  abort: () => void;
 }
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
@@ -38,31 +41,41 @@ declare global {
   }
 }
 
-export interface RealtimeTranscriptCallback {
+// ---------- Public API ----------
+
+export interface RealtimeTranscriptCallbacks {
   onInterim: (text: string) => void;
   onFinal: (text: string) => void;
-  onError: (error: string) => void;
+  onError: (message: string) => void;
   onEnd: () => void;
 }
 
 export class WebSpeechRecognitionManager {
   private recognition: SpeechRecognitionInstance | null = null;
-  private isListening = false;
-  private callbacks: RealtimeTranscriptCallback;
+  private isActive = false;
+  private abortTimer: ReturnType<typeof setTimeout> | null = null;
+  private callbacks: RealtimeTranscriptCallbacks;
 
-  constructor(callbacks: RealtimeTranscriptCallback) {
+  constructor(callbacks: RealtimeTranscriptCallbacks) {
     this.callbacks = callbacks;
   }
 
+  // ---- public helpers ----
+
   public isSupported(): boolean {
     if (typeof window === "undefined") return false;
-    return "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   }
 
+  public getIsActive(): boolean {
+    return this.isActive;
+  }
+
+  // ---- start ----
+
   public start(): boolean {
-    if (this.isListening) {
-      this.stop();
-    }
+    // Tear down any stale instance before starting fresh
+    this.teardown();
 
     if (!this.isSupported()) {
       this.callbacks.onError("浏览器不支持语音识别");
@@ -70,102 +83,146 @@ export class WebSpeechRecognitionManager {
     }
 
     try {
-      const SpeechRecognitionClass =
+      const Ctor =
         window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (!SpeechRecognitionClass) {
+      if (!Ctor) {
         this.callbacks.onError("无法初始化语音识别");
         return false;
       }
 
-      this.recognition = new SpeechRecognitionClass();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-      this.recognition.lang = "zh-CN";
-      this.recognition.maxAlternatives = 1;
-      this.recognition.maxResults = 10;
+      // Always create a brand-new instance to avoid stale state
+      const instance = new Ctor();
+      instance.continuous = true;
+      instance.interimResults = true;
+      instance.lang = "zh-CN";
+      instance.maxAlternatives = 1;
 
-      this.recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
-
+      instance.onresult = (event: SpeechRecognitionEvent) => {
+        let interim = "";
+        let final_ = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          const transcript = result[0].transcript;
-          if (result.isFinal) {
-            finalTranscript += transcript;
+          const r = event.results[i];
+          const text = r[0].transcript;
+          if (r.isFinal) {
+            final_ += text;
           } else {
-            interimTranscript += transcript;
+            interim += text;
           }
         }
-
-        if (interimTranscript) {
-          this.callbacks.onInterim(interimTranscript);
-        }
-
-        if (finalTranscript) {
-          this.callbacks.onFinal(finalTranscript);
-        }
+        if (interim) this.callbacks.onInterim(interim);
+        if (final_) this.callbacks.onFinal(final_);
       };
 
-      this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        const errorMessage = this.getErrorMessage(event.error);
-        this.callbacks.onError(errorMessage);
+      instance.onerror = (event: SpeechRecognitionErrorEvent) => {
+        // "aborted" is expected when we call abort() ourselves – suppress
+        if (event.error === "aborted") return;
+        this.callbacks.onError(this.friendlyError(event.error));
       };
 
-      this.recognition.onend = () => {
-        if (this.isListening) {
+      instance.onend = () => {
+        // Clear the abort safety-net timer
+        if (this.abortTimer) {
+          clearTimeout(this.abortTimer);
+          this.abortTimer = null;
+        }
+        // Only notify if we were actually active (guards against stale events)
+        if (this.isActive) {
+          this.isActive = false;
           this.callbacks.onEnd();
         }
-        this.isListening = false;
       };
 
-      this.recognition.start();
-      this.isListening = true;
+      instance.start();
+      this.recognition = instance;
+      this.isActive = true;
       return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "启动语音识别失败";
-      this.callbacks.onError(message);
+    } catch (err) {
+      this.callbacks.onError(
+        err instanceof Error ? err.message : "启动语音识别失败",
+      );
       return false;
     }
   }
 
-  public stop() {
-    if (this.recognition && this.isListening) {
-      try {
-        this.recognition.stop();
-      } catch {
-        // ignore stop errors
-      }
+  // ---- stop (graceful, with abort fallback) ----
+
+  public stop(): void {
+    if (!this.recognition || !this.isActive) return;
+
+    // Try graceful stop first
+    try {
+      this.recognition.stop();
+    } catch {
+      // If stop() throws, fall through to abort immediately
+      this.forceAbort();
+      return;
     }
-    this.isListening = false;
+
+    // Safety net: if onend hasn't fired within 800ms, force abort
+    this.abortTimer = setTimeout(() => {
+      if (this.isActive) {
+        this.forceAbort();
+      }
+    }, 800);
   }
 
-  public destroy() {
-    this.stop();
+  // ---- destroy (cleanup on unmount) ----
+
+  public destroy(): void {
+    this.teardown();
+  }
+
+  // ---- internals ----
+
+  private forceAbort(): void {
+    if (this.abortTimer) {
+      clearTimeout(this.abortTimer);
+      this.abortTimer = null;
+    }
+    try {
+      this.recognition?.abort();
+    } catch {
+      // swallow
+    }
+    // onend may or may not fire after abort – ensure we transition
+    if (this.isActive) {
+      this.isActive = false;
+      this.callbacks.onEnd();
+    }
+  }
+
+  private teardown(): void {
+    if (this.abortTimer) {
+      clearTimeout(this.abortTimer);
+      this.abortTimer = null;
+    }
+    if (this.recognition && this.isActive) {
+      try {
+        this.recognition.abort();
+      } catch {
+        // swallow
+      }
+    }
+    this.isActive = false;
     this.recognition = null;
   }
 
-  public getIsListening(): boolean {
-    return this.isListening;
-  }
-
-  private getErrorMessage(error: string): string {
-    const errorMessages: Record<string, string> = {
+  private friendlyError(code: string): string {
+    const map: Record<string, string> = {
       "not-allowed": "请允许麦克风权限",
       "no-speech": "未检测到语音输入",
       "audio-capture": "未检测到麦克风设备",
-      "network": "网络连接失败",
-      "aborted": "语音识别被中断",
+      network: "网络连接失败",
+      aborted: "语音识别被中断",
       "language-not-supported": "不支持当前语言",
       "service-not-allowed": "语音识别服务不可用",
     };
-    return errorMessages[error] || `语音识别错误: ${error}`;
+    return map[code] ?? `语音识别错误: ${code}`;
   }
 }
 
 export function createWebSpeechManager(
-  callbacks: RealtimeTranscriptCallback,
+  callbacks: RealtimeTranscriptCallbacks,
 ): WebSpeechRecognitionManager {
   return new WebSpeechRecognitionManager(callbacks);
 }

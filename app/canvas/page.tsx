@@ -49,6 +49,7 @@ type FlowStage =
   | ""
   | "正在录音"
   | "正在识别语音"
+  | "请确认识别文本"
   | "正在解析指令"
   | "正在绘制草图"
   | "正在自动保存 PNG"
@@ -84,12 +85,15 @@ function CanvasContent() {
   const canvasAgentRef = useRef<CanvasAgent | null>(null);
   // 使用全局语音控制
   const {
+    state: voiceState,
     isListening,
     transcript,
     interimTranscript,
     transcriptSource,
     startListening,
     stopListening,
+    confirmTranscript,
+    cancelTranscript,
     registerCommandHandler,
   } = useVoiceContext();
 
@@ -436,14 +440,36 @@ function CanvasContent() {
     return registerCommandHandler(handleCommand);
   }, [registerCommandHandler, processTranscript]);
 
+  // 同步 voiceState 到 UI 状态
+  useEffect(() => {
+    if (voiceState === "ready") {
+      // Web Speech API 识别完成，展示文本等待确认
+      setIsRecording(false);
+      setIsProcessing(false);
+      setMicState("idle");
+      setFlowStage("请确认识别文本");
+    } else if (voiceState === "processing") {
+      // 用户已确认，开始处理
+      setMicState("processing");
+      setFlowStage("正在解析指令");
+    } else if (voiceState === "idle" && !isListening && !isProcessing) {
+      // 空闲状态
+      setMicState("idle");
+      setFlowStage("");
+    }
+  }, [voiceState, isListening, isProcessing]);
+
   const handleMicTrigger = async () => {
     if (isListening) {
-      // 停止录音
+      // 停止录音（Web Speech API stop → onEnd → ready 状态）
       stopListening();
       setIsRecording(false);
-      setMicState("processing");
-      setFlowStage("正在识别语音");
       return;
+    }
+
+    // 如果在 ready 状态点击麦克风，先取消当前文本
+    if (voiceState === "ready") {
+      cancelTranscript();
     }
 
     // 开始录音
@@ -459,6 +485,16 @@ function CanvasContent() {
       setFlowStage("");
       setTimeout(() => setMicState("idle"), 1200);
     }
+  };
+
+  const handleConfirmTranscript = () => {
+    confirmTranscript();
+  };
+
+  const handleCancelTranscript = () => {
+    cancelTranscript();
+    setMicState("idle");
+    setFlowStage("");
   };
 
   const handleLogout = async () => {
@@ -714,6 +750,26 @@ function CanvasContent() {
               isProcessing={isProcessing}
               stage={flowStage}
             />
+
+            {/* 确认/取消按钮：voiceState === "ready" 时展示 */}
+            {voiceState === "ready" && transcript.trim() && (
+              <div className="flex items-center justify-center gap-3 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <button
+                  type="button"
+                  onClick={handleCancelTranscript}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-white border border-border-custom text-text-secondary hover:bg-gray-50 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmTranscript}
+                  className="px-5 py-2 text-sm font-bold rounded-lg bg-sakura text-white hover:bg-sakura/90 transition-colors shadow-sm"
+                >
+                  确认执行
+                </button>
+              </div>
+            )}
 
             <div
               className="h-[96px] flex flex-col items-center justify-center relative"

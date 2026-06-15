@@ -90,20 +90,19 @@ export default function PortfolioExportModal({
       const columnWidth = 400;
       const totalWidth = columns * columnWidth + (columns - 1) * gap + padding * 2;
 
-      // Calculate rows based on images distribution
-      const columnHeights: number[] = Array(columns).fill(padding);
-
       // Pre-calculate image heights maintaining aspect ratio
       const imageHeights = images.map((img) => {
         const aspectRatio = img.height / img.width;
         return columnWidth * aspectRatio;
       });
 
-      // Assign images to columns and calculate heights
+      // Masonry layout: find shortest column for each image
+      const columnHeights: number[] = Array(columns).fill(padding);
+
+      // First pass: calculate total height for each column
       artworks.forEach((_, index) => {
-        const column = index % columns;
-        const imgHeight = imageHeights[index];
-        columnHeights[column] += imgHeight + labelHeight + gap;
+        const shortestColumn = columnHeights.indexOf(Math.min(...columnHeights));
+        columnHeights[shortestColumn] += imageHeights[index] + labelHeight + gap;
       });
 
       const totalHeight = Math.max(...columnHeights) + padding;
@@ -115,17 +114,17 @@ export default function PortfolioExportModal({
       ctx.fillStyle = "#FAFAF8";
       ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-      // Draw images in masonry layout
+      // Second pass: draw images in masonry layout (shortest column algorithm)
       const columnXPositions = Array.from({ length: columns }, (_, i) =>
         padding + i * (columnWidth + gap)
       );
       const currentColumnHeights: number[] = Array(columns).fill(padding);
 
       artworks.forEach((artwork, index) => {
-        const column = index % columns;
+        const shortestColumn = currentColumnHeights.indexOf(Math.min(...currentColumnHeights));
         const img = images[index];
-        const x = columnXPositions[column];
-        const y = currentColumnHeights[column];
+        const x = columnXPositions[shortestColumn];
+        const y = currentColumnHeights[shortestColumn];
         const imgHeight = imageHeights[index];
 
         // Draw image
@@ -157,7 +156,7 @@ export default function PortfolioExportModal({
           y + imgHeight + labelHeight / 2
         );
 
-        currentColumnHeights[column] += imgHeight + labelHeight + gap;
+        currentColumnHeights[shortestColumn] += imgHeight + labelHeight + gap;
       });
 
       // Download

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { MessageCircle, Send, CheckCircle, XCircle, RefreshCw, QrCode } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MessageCircle, Send, CheckCircle, XCircle, RefreshCw, QrCode, ChevronLeft, ChevronRight } from 'lucide-react';
+import { gsap } from 'gsap';
 
 interface WeChatBotPanelProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -15,22 +16,56 @@ export default function WeChatBotPanel({ canvasRef }: WeChatBotPanelProps) {
   });
   const [isSending, setIsSending] = useState(false);
   const [lastSent, setLastSent] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const parseJsonSafely = useCallback(async (response: Response) => {
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid JSON response: ${text.slice(0, 120)}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      gsap.set(panel, { width: isExpanded ? 240 : 72 });
+      return;
+    }
+
+    gsap.to(panel, {
+      width: isExpanded ? 240 : 72,
+      duration: 0.35,
+      ease: 'power2.out',
+    });
+  }, [isExpanded]);
 
   // 获取机器人状态
   const fetchStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/wechat/send');
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       setStatus(data);
-    } catch (error) {
+    } catch {
       setStatus({ ready: false, hasTargetContact: false, targetContactName: null });
     }
-  }, []);
+  }, [parseJsonSafely]);
 
   useEffect(() => {
-    fetchStatus();
+    const timeout = window.setTimeout(() => {
+      void fetchStatus();
+    }, 0);
     const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [fetchStatus]);
 
   // 发送画布内容到微信
@@ -70,7 +105,7 @@ export default function WeChatBotPanel({ canvasRef }: WeChatBotPanelProps) {
         body: formData,
       });
       
-      const data = await result.json();
+      const data = await parseJsonSafely(result);
       
       if (data.success) {
         setLastSent(new Date().toLocaleString());
@@ -86,113 +121,122 @@ export default function WeChatBotPanel({ canvasRef }: WeChatBotPanelProps) {
   };
 
   return (
-    <div className="w-64 bg-surface/90 backdrop-blur-sm border-l border-sakura/10 flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-green-600" />
+    <div
+      ref={panelRef}
+      className="h-full w-[72px] shrink-0 overflow-hidden rounded-3xl border border-sakura/10 bg-surface/92 shadow-lg shadow-sakura/5 backdrop-blur-sm"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-sakura/10 px-3 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-mint-light text-mint">
+              <MessageCircle className="h-4 w-4" />
+            </div>
+            {isExpanded && (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-text-primary">微信机器人</p>
+                <p className="text-[11px] text-text-secondary">
+                  {status.ready ? '已连接' : '待连接'}
+                </p>
+              </div>
+            )}
           </div>
-          <h3 className="font-semibold text-text-primary">微信机器人</h3>
-        </div>
-      </div>
 
-      {/* Status */}
-      <div className="flex-1 p-4 space-y-4 overflow-auto">
-        {/* Bot Status */}
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-text-secondary">机器人状态</span>
-            <button
-              onClick={fetchStatus}
-              className="p-1 hover:bg-sakura-light/20 rounded-lg transition-colors"
-              aria-label="刷新状态"
-            >
-              <RefreshCw className={`w-4 h-4 text-text-disabled ${status.ready ? '' : 'animate-spin'}`} />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-sakura-light/20 hover:text-text-primary"
+            aria-label={isExpanded ? '收起微信机器人面板' : '展开微信机器人面板'}
+            aria-pressed={isExpanded}
+          >
+            {isExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
+
+        <div className="flex flex-1 flex-col items-center gap-3 px-2 py-3">
+          <div className="flex w-full items-center justify-center rounded-2xl border border-sakura/10 bg-white/80 px-2 py-3">
             {status.ready ? (
-              <>
-                <CheckCircle className="w-5 h-5 text-mint" />
-                <span className="text-sm text-text-primary">已连接</span>
-              </>
+              <CheckCircle className="h-5 w-5 text-mint" />
             ) : (
-              <>
-                <XCircle className="w-5 h-5 text-text-disabled" />
-                <span className="text-sm text-text-disabled">未连接</span>
-              </>
+              <XCircle className="h-5 w-5 text-text-disabled" />
+            )}
+            {isExpanded && (
+              <div className="ml-2 min-w-0 flex-1">
+                <p className="text-xs text-text-secondary">机器人状态</p>
+                <p className="truncate text-sm font-medium text-text-primary">
+                  {status.ready ? '已连接' : '未连接'}
+                </p>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Target Contact */}
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <span className="text-sm text-text-secondary">目标联系人</span>
-          <div className="mt-2 flex items-center gap-2">
-            {status.hasTargetContact ? (
-              <>
-                <div className="w-8 h-8 rounded-full bg-sakura-light flex items-center justify-center">
-                  <span className="text-xs font-medium text-sakura">
-                    {status.targetContactName?.charAt(0) || '?'}
-                  </span>
+          {isExpanded && (
+            <div className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto pr-1">
+              <div className="rounded-2xl bg-white/85 p-3 shadow-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-text-secondary">目标联系人</span>
+                  <button
+                    onClick={fetchStatus}
+                    className="rounded-lg p-1 transition-colors hover:bg-sakura-light/20"
+                    aria-label="刷新状态"
+                  >
+                    <RefreshCw className={`h-4 w-4 text-text-disabled ${status.ready ? '' : 'animate-spin'}`} />
+                  </button>
                 </div>
-                <span className="text-sm text-text-primary">{status.targetContactName}</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="w-5 h-5 text-text-disabled" />
-                <span className="text-sm text-text-disabled">未绑定</span>
-              </>
-            )}
-          </div>
-          {!status.hasTargetContact && (
-            <p className="text-xs text-text-disabled mt-2">
-              请在微信中向机器人发送"绑定"指令
-            </p>
+                <div className="flex items-center gap-2">
+                  {status.hasTargetContact ? (
+                    <>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sakura-light text-xs font-medium text-sakura">
+                        {status.targetContactName?.charAt(0) || '?'}
+                      </div>
+                      <span className="truncate text-sm text-text-primary">{status.targetContactName}</span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-text-disabled">未绑定</span>
+                  )}
+                </div>
+                {!status.hasTargetContact && (
+                  <p className="mt-2 text-xs text-text-disabled">
+                    请向机器人发送 &quot;绑定&quot; 指令
+                  </p>
+                )}
+              </div>
+
+              {lastSent && (
+                <div className="rounded-2xl border border-mint/20 bg-mint-light/50 p-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-mint" />
+                    <span className="text-xs text-mint">最近发送于 {lastSent}</span>
+                  </div>
+                </div>
+              )}
+
+              {!status.ready && (
+                <div className="rounded-2xl border border-butter/20 bg-butter-light/50 p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <QrCode className="h-4 w-4 text-butter" />
+                    <span className="text-sm text-text-primary">启动机器人</span>
+                  </div>
+                  <p className="text-xs text-text-secondary">在终端运行 `npm run wechaty`</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Last Sent */}
-        {lastSent && (
-          <div className="bg-mint-light/50 rounded-xl p-3 border border-mint/20">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-mint" />
-              <span className="text-sm text-mint">
-                已发送: {lastSent}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* QR Code Hint */}
-        {!status.ready && (
-          <div className="bg-butter-light/50 rounded-xl p-3 border border-butter/20">
-            <div className="flex items-center gap-2 mb-2">
-              <QrCode className="w-4 h-4 text-butter" />
-              <span className="text-sm text-text-primary">启动机器人</span>
-            </div>
-            <p className="text-xs text-text-secondary">
-              在终端运行: npm run wechaty
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Send Button */}
-      <div className="p-4 border-t border-border">
-        <button
-          onClick={handleSendToWeChat}
-          disabled={!status.ready || !status.hasTargetContact || isSending}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
-            status.ready && status.hasTargetContact && !isSending
-              ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm'
-              : 'bg-text-disabled text-white cursor-not-allowed'
-          }`}
-        >
-          <Send className={`w-4 h-4 ${isSending ? 'animate-pulse' : ''}`} />
-          {isSending ? '发送中...' : '发送到微信'}
-        </button>
+        <div className="border-t border-sakura/10 p-2">
+          <button
+            onClick={handleSendToWeChat}
+            disabled={!status.ready || !status.hasTargetContact || isSending}
+            className={`flex w-full items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-medium transition-all ${
+              status.ready && status.hasTargetContact && !isSending
+                ? 'bg-mint text-white shadow-sm hover:bg-mint/90'
+                : 'bg-text-disabled text-white cursor-not-allowed'
+            }`}
+            aria-label="发送到微信"
+          >
+            <Send className={`h-4 w-4 ${isSending ? 'animate-pulse' : ''}`} />
+            {isExpanded ? (isSending ? '发送中...' : '发送到微信') : null}
+          </button>
+        </div>
       </div>
     </div>
   );

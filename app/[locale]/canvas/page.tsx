@@ -60,6 +60,19 @@ export default function CanvasPage() {
   const [brushPosition, setBrushPosition] = useState({ x: 0, y: 0 });
   const [isThinking, setIsThinking] = useState(false);
 
+  const CANVAS_WIDTH = 960;
+  const CANVAS_HEIGHT = 720;
+
+  const parseJsonSafely = useCallback(async (response: Response) => {
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid JSON response: ${text.slice(0, 120)}`);
+    }
+  }, []);
+
   // 预设模板数据 - 使用图标代替 emoji
   const presetTemplates = [
     { icon: 'Sun', title: '日出日落', prompt: '画一个美丽的日出场景，太阳从地平线升起' },
@@ -161,7 +174,7 @@ export default function CanvasPage() {
   }, []);
 
   // Canvas 预设动画循环
-  const animatePresetShapes = useCallback(() => {
+  const animatePresetShapes = useCallback(function runPresetShapesAnimation() {
     const canvas = canvasRef.current;
     if (!canvas || !isThinking) return;
     
@@ -189,7 +202,7 @@ export default function CanvasPage() {
       drawPresetShape(ctx, shape.type, shape.color, shape.size || 30, x, y, progress);
     });
     
-    shapeAnimationRef.current = requestAnimationFrame(animatePresetShapes);
+    shapeAnimationRef.current = requestAnimationFrame(runPresetShapesAnimation);
   }, [isThinking, presetShapes, drawPresetShape]);
 
   // 启动预设模板轮播动画和 Canvas 动画
@@ -333,10 +346,8 @@ export default function CanvasPage() {
     if (!ctx) return;
 
     // 设置固定 Canvas 尺寸
-    const fixedWidth = 800;
-    const fixedHeight = 600;
-    canvas.width = fixedWidth;
-    canvas.height = fixedHeight;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
 
     // 绘制背景
     if (instructions.backgroundColor) {
@@ -618,10 +629,8 @@ export default function CanvasPage() {
     if (!ctx) return;
 
     // 设置固定尺寸
-    const fixedWidth = 800;
-    const fixedHeight = 600;
-    canvas.width = fixedWidth;
-    canvas.height = fixedHeight;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
 
     // 初始化白色背景
     ctx.fillStyle = '#FFFFFF';
@@ -772,6 +781,47 @@ export default function CanvasPage() {
     router.push('/gallery');
   }, [router]);
 
+  // 发送画布到微信
+  const sendCanvasToWeChat = useCallback(async () => {
+    if (!canvasRef.current) return;
+
+    try {
+      // 检查机器人状态
+      const statusResponse = await fetch('/api/wechat/send');
+      const status = await parseJsonSafely(statusResponse);
+      
+      if (!status.ready || !status.hasTargetContact) {
+        return; // 机器人未就绪或未绑定联系人，不发送
+      }
+
+      // 将画布转换为图片
+      const canvas = canvasRef.current;
+      const imageData = canvas.toDataURL('image/png');
+      
+      // 转换为 Blob
+      const response = await fetch(imageData);
+      const blob = await response.blob();
+      
+      // 创建 FormData
+      const formData = new FormData();
+      formData.append('image', blob, 'canvas.png');
+      
+      // 发送到 API
+      const result = await fetch('/api/wechat/send', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await parseJsonSafely(result);
+      
+      if (data.success) {
+        addToast('success', '已自动发送到微信');
+      }
+    } catch (error) {
+      console.error('Auto send to WeChat error:', error);
+    }
+  }, [canvasRef, addToast, parseJsonSafely]);
+
   // 处理开始绘图
   const handleStartDrawing = useCallback(async () => {
     if (!sessionDescription.trim()) {
@@ -834,48 +884,7 @@ export default function CanvasPage() {
     } finally {
       setIsDrawing(false);
     }
-  }, [sessionDescription, drawShapes, addToast, startPresetAnimation, stopPresetAnimation, user]);
-
-  // 发送画布到微信
-  const sendCanvasToWeChat = useCallback(async () => {
-    if (!canvasRef.current) return;
-
-    try {
-      // 检查机器人状态
-      const statusResponse = await fetch('/api/wechat/send');
-      const status = await statusResponse.json();
-      
-      if (!status.ready || !status.hasTargetContact) {
-        return; // 机器人未就绪或未绑定联系人，不发送
-      }
-
-      // 将画布转换为图片
-      const canvas = canvasRef.current;
-      const imageData = canvas.toDataURL('image/png');
-      
-      // 转换为 Blob
-      const response = await fetch(imageData);
-      const blob = await response.blob();
-      
-      // 创建 FormData
-      const formData = new FormData();
-      formData.append('image', blob, 'canvas.png');
-      
-      // 发送到 API
-      const result = await fetch('/api/wechat/send', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await result.json();
-      
-      if (data.success) {
-        addToast('success', '已自动发送到微信');
-      }
-    } catch (error) {
-      console.error('Auto send to WeChat error:', error);
-    }
-  }, [canvasRef, addToast]);
+  }, [sessionDescription, drawShapes, addToast, startPresetAnimation, stopPresetAnimation, user, sendCanvasToWeChat]);
 
   if (!user) {
     return (
@@ -886,7 +895,7 @@ export default function CanvasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-bg via-sakura-light/5 to-macaron-blue-light/5 flex flex-col">
+      <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-bg via-sakura-light/5 to-macaron-blue-light/5">
       {/* Toast 通知区域 */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {toasts.map((toast) => (
@@ -944,15 +953,18 @@ export default function CanvasPage() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-auto p-4">
-        {/* Canvas Area with Sidebar */}
-        <div className="flex gap-4 items-start">
-          {/* Canvas Container */}
-          <div
-            ref={canvasAreaRef}
-            className="relative bg-gradient-to-br from-white to-sakura-light/10 rounded-3xl border border-sakura/15 shadow-xl shadow-sakura/8 overflow-hidden"
-            style={{ width: '800px', height: '600px' }}
-          >
+      <div className="flex-1 min-h-0 overflow-hidden px-3 pb-3 pt-3">
+        <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-3 overflow-hidden">
+          {/* Workspace */}
+          <div className="flex min-h-0 flex-1 items-center gap-3 overflow-hidden">
+            {/* WeChat Bot Sidebar */}
+            <WeChatBotPanel canvasRef={canvasRef} />
+
+            {/* Canvas Container */}
+            <div
+              ref={canvasAreaRef}
+              className="relative aspect-[4/3] h-auto max-h-full w-full max-w-[960px] flex-[0_1_960px] overflow-hidden rounded-3xl border border-sakura/15 bg-gradient-to-br from-white to-sakura-light/10 shadow-xl shadow-sakura/8"
+            >
             {/* 背景装饰网格 */}
             <div
               className="absolute inset-0 opacity-20"
@@ -1057,111 +1069,84 @@ export default function CanvasPage() {
             </div>
           </div>
 
-          {/* WeChat Bot Sidebar */}
-          <WeChatBotPanel canvasRef={canvasRef} />
-        </div>
-
-        {/* Sidebar Toolbar */}
-        <div
-          ref={toolbarRef}
-          className="bg-surface/95 backdrop-blur-sm rounded-2xl border border-sakura/10 shadow-lg p-3 flex flex-col gap-1"
-        >
-            {/* 撤销 */}
-            <button
-              onClick={() => addToast('info', '撤销功能开发中')}
-              className="p-3 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
-              aria-label="撤销"
-              title="撤销"
+            {/* Toolbar */}
+            <div
+              ref={toolbarRef}
+              className="hidden h-full w-[68px] shrink-0 flex-col justify-between rounded-3xl border border-sakura/10 bg-surface/95 p-2 shadow-lg backdrop-blur-sm xl:flex"
             >
-              <RotateCcw className="w-5 h-5" />
-            </button>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => addToast('info', '撤销功能开发中')}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-sakura-light/20 hover:text-text-primary"
+                  aria-label="撤销"
+                  title="撤销"
+                >
+                  <RotateCcw className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => addToast('info', '重做功能开发中')}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-sakura-light/20 hover:text-text-primary"
+                  aria-label="重做"
+                  title="重做"
+                >
+                  <RotateCw className="h-5 w-5" />
+                </button>
+                <div className="my-1 h-px w-full bg-border" />
+                <button
+                  onClick={handleNewCanvas}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-lavender-light/20 hover:text-lavender"
+                  aria-label="新建画布"
+                  title="新建画布"
+                >
+                  <FilePlus className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={clearCanvas}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-error/10 hover:text-error"
+                  aria-label="清空画布"
+                  title="清空画布"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+                <div className="my-1 h-px w-full bg-border" />
+                <button
+                  onClick={handleSaveClick}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-mint-light/20 hover:text-mint"
+                  aria-label="保存到图库"
+                  title="保存到图库"
+                >
+                  <Save className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={exportPNG}
+                  className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-macaron-blue-light/20 hover:text-macaron-blue"
+                  aria-label="导出 PNG"
+                  title="导出 PNG"
+                >
+                  <Download className="h-5 w-5" />
+                </button>
+              </div>
 
-            {/* 重做 */}
-            <button
-              onClick={() => addToast('info', '重做功能开发中')}
-              className="p-3 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
-              aria-label="重做"
-              title="重做"
-            >
-              <RotateCw className="w-5 h-5" />
-            </button>
-
-            <div className="w-full h-px bg-border my-1" />
-
-            {/* 新建画布 */}
-            <button
-              onClick={handleNewCanvas}
-              className="p-3 rounded-xl text-text-secondary hover:text-lavender hover:bg-lavender-light/20 transition-all"
-              aria-label="新建画布"
-              title="新建画布"
-            >
-              <FilePlus className="w-5 h-5" />
-            </button>
-
-            {/* 清空画布 */}
-            <button
-              onClick={clearCanvas}
-              className="p-3 rounded-xl text-text-secondary hover:text-error hover:bg-error/10 transition-all"
-              aria-label="清空画布"
-              title="清空画布"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-
-            <div className="w-full h-px bg-border my-1" />
-
-            {/* 保存到图库 */}
-            <button
-              onClick={handleSaveClick}
-              className="p-3 rounded-xl text-text-secondary hover:text-mint hover:bg-mint-light/20 transition-all"
-              aria-label="保存到图库"
-              title="保存到图库"
-            >
-              <Save className="w-5 h-5" />
-            </button>
-
-            {/* 导出 PNG */}
-            <button
-              onClick={exportPNG}
-              className="p-3 rounded-xl text-text-secondary hover:text-macaron-blue hover:bg-macaron-blue-light/20 transition-all"
-              aria-label="导出 PNG"
-              title="导出 PNG"
-            >
-              <Download className="w-5 h-5" />
-            </button>
-
-            <div className="w-full h-px bg-border my-1" />
-
-            {/* 当前颜色指示 */}
-            <div className="flex flex-col items-center gap-1 p-2">
-              <div className="w-6 h-6 rounded-full bg-sakura border-2 border-white shadow-sm" />
-              <span className="text-xs text-text-secondary font-medium">樱花粉</span>
-            </div>
-
-            <div className="w-full h-px bg-border my-1" />
-
-            {/* 模式标签 */}
-            <div className="px-3 py-2 rounded-full bg-sakura-light text-sakura text-xs font-semibold text-center">
-              绘图模式
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-6 w-6 rounded-full border-2 border-white bg-sakura shadow-sm" />
+                <div className="rounded-full bg-sakura-light px-3 py-1 text-[11px] font-semibold text-sakura">
+                  绘图
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
         {/* Description & Voice Area */}
         <div
           ref={descriptionRef}
-          className="w-full max-w-4xl mt-4 flex gap-4"
+          className="grid shrink-0 grid-cols-[minmax(0,1fr)_280px] gap-3"
         >
-          {/* 绘图描述区域 */}
-          <section className="flex-1 rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5">
-            <div className="flex items-center gap-2 px-5 pt-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-lavender/20 text-lavender">
+          <section className="rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5">
+            <div className="flex items-center gap-2 px-4 pt-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lavender/20 text-lavender">
                 <Sparkles className="h-4 w-4" />
               </div>
-              <h2 className="text-sm font-semibold text-text-primary">
-                绘图描述
-              </h2>
-              {/* AI 思考动效 */}
+              <h2 className="text-sm font-semibold text-text-primary">绘图描述</h2>
               {isThinking && (
                 <div
                   ref={thinkingIndicatorRef}
@@ -1172,7 +1157,7 @@ export default function CanvasPage() {
                     {[0, 1, 2].map((i) => (
                       <div
                         key={i}
-                        className="w-2 h-2 rounded-full bg-lavender"
+                        className="h-2 w-2 rounded-full bg-lavender"
                         style={{
                           animation: 'pulse 1.4s ease-in-out infinite',
                           animationDelay: `${i * 0.2}s`,
@@ -1189,33 +1174,35 @@ export default function CanvasPage() {
                 value={sessionDescription}
                 onChange={(event) => setSessionDescription(event.target.value)}
                 placeholder="输入绘图描述..."
-                className="min-h-[60px] max-h-[100px] w-full resize-none rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-primary outline-none transition-all placeholder:text-text-disabled focus:border-sakura focus:ring-2 focus:ring-sakura/30"
+                className="min-h-[56px] w-full resize-none rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-primary outline-none transition-all placeholder:text-text-disabled focus:border-sakura focus:ring-2 focus:ring-sakura/30"
                 aria-label="绘图描述输入框"
               />
 
-              {/* 绘图 Agent 按钮 */}
-              <div className="mt-3 flex justify-end">
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                  <span className="rounded-full bg-sakura-light px-2 py-1 text-sakura">单屏布局</span>
+                  <span>语音后再点开始绘图</span>
+                </div>
                 <button
                   onClick={handleStartDrawing}
                   disabled={!sessionDescription.trim() || isDrawing}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all ${
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
                     sessionDescription.trim() && !isDrawing
-                      ? 'bg-lavender hover:bg-lavender/90 text-white shadow-sm'
-                      : 'bg-text-disabled text-white cursor-not-allowed'
+                      ? 'bg-lavender text-white shadow-sm hover:bg-lavender/90'
+                      : 'cursor-not-allowed bg-text-disabled text-white'
                   }`}
                   aria-label="开始绘图"
                 >
-                  <Sparkles className={`w-4 h-4 ${isDrawing ? 'animate-spin' : ''}`} />
+                  <Sparkles className={`h-4 w-4 ${isDrawing ? 'animate-spin' : ''}`} />
                   {isDrawing ? '绘制中...' : '开始绘图'}
                 </button>
               </div>
             </div>
           </section>
 
-          {/* 语音输入区域 */}
           <div
             ref={voiceAreaRef}
-            className="w-auto"
+            className="rounded-3xl border border-sakura/10 bg-white/90 px-4 py-3 shadow-sm shadow-sakura/5"
           >
             <XfyunVoiceInput
               onTranscriptChange={handleTranscriptChange}
@@ -1223,6 +1210,7 @@ export default function CanvasPage() {
               transcript={transcript}
             />
           </div>
+        </div>
         </div>
       </div>
 

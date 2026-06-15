@@ -13,24 +13,21 @@ async function parseJsonSafely(response: Response) {
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
-    const image = formData.get('image') as File;
-    
+    const image = formData.get('image') as File | null;
+
     if (!image) {
       return NextResponse.json({ success: false, message: '未上传图片' }, { status: 400 });
     }
-    
-    // 转换为 Buffer
+
     const buffer = Buffer.from(await image.arrayBuffer());
-    
-    // 创建 FormData 发送到微信机器人服务
     const botFormData = new FormData();
     botFormData.append('image', new Blob([buffer], { type: image.type }), 'canvas.png');
-    
+
     const response = await fetch('http://localhost:3001/send-image', {
       method: 'POST',
       body: botFormData,
     });
-    
+
     const result = await parseJsonSafely(response);
     return NextResponse.json(result, { status: response.status });
   } catch (error) {

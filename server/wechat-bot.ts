@@ -4,6 +4,7 @@
  */
 
 import { WechatyBuilder, Contact, Message } from 'wechaty';
+import { FileBox } from 'file-box';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -92,9 +93,8 @@ app.post('/send-image', upload.single('image'), async (req, res) => {
     const imagePath = path.join(__dirname, '../uploads/', req.file.filename);
     
     // 发送图片
-    await targetContact.say({
-      file: imagePath,
-    });
+    const imageFile = FileBox.fromFile(imagePath);
+    await targetContact.say(imageFile);
     
     // 删除临时文件
     fs.unlinkSync(imagePath);

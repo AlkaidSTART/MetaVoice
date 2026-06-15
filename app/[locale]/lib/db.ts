@@ -4,13 +4,14 @@
  */
 
 const DB_NAME = "VoiceCanvasDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 升级版本以添加新表
 
 // 数据库表名
 export const STORES = {
   USERS: "users",
   ARTWORKS: "artworks",
   SESSIONS: "sessions",
+  PROMPT_HISTORY: "promptHistory", // 新增：提示词历史表
 } as const;
 
 // 用户数据结构
@@ -41,6 +42,18 @@ export interface Session {
   userId: string;
   createdAt: Date;
   expiresAt: Date;
+}
+
+// 提示词历史数据结构
+export interface PromptHistory {
+  id: string;
+  userId: string | null; // 支持未登录用户
+  prompt: string; // 用户输入的提示词
+  canvasParams: string; // canvas参数 JSON 字符串
+  similarityScore: number; // 相似度分数（用于排序）
+  usageCount: number; // 使用次数
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 class IndexedDBManager {
@@ -84,6 +97,14 @@ class IndexedDBManager {
         if (!db.objectStoreNames.contains(STORES.SESSIONS)) {
           const sessionStore = db.createObjectStore(STORES.SESSIONS, { keyPath: "id" });
           sessionStore.createIndex("userId", "userId", { unique: false });
+        }
+
+        // 创建提示词历史表
+        if (!db.objectStoreNames.contains(STORES.PROMPT_HISTORY)) {
+          const promptStore = db.createObjectStore(STORES.PROMPT_HISTORY, { keyPath: "id" });
+          promptStore.createIndex("userId", "userId", { unique: false });
+          promptStore.createIndex("prompt", "prompt", { unique: false });
+          promptStore.createIndex("usageCount", "usageCount", { unique: false });
         }
       };
     });
@@ -291,5 +312,126 @@ export const artworkDB = {
   // 删除作品
   async delete(id: string): Promise<void> {
     await db.delete(STORES.ARTWORKS, id);
+  },
+};
+
+// 字符串相似度计算（Levenshtein距离）
+function calculateSimilarity(s1: string, s2: string): number {
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const matrix: number[][] = [];
+
+  // 初始化矩阵
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+
+  // 填充矩阵
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // 删除
+        matrix[i][j - 1] + 1,      // 插入
+        matrix[i - 1][j - 1] + cost // 替换
+      );
+    }
+  }
+
+  // 计算相似度分数 (0-1)
+  const maxLen = Math.max(len1, len2);
+  return 1 - (matrix[len1][len2] / maxLen);
+}
+
+// 提示词历史相关方法
+export const promptHistoryDB = {
+  // 保存提示词和canvas参数
+  async save(prompt: string, canvasParams: object, userId: string | null = null): Promise<PromptHistory> {
+    const newHistory: PromptHistory = {
+      id: `prompt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId,
+      prompt: prompt.trim(),
+      canvasParams: JSON.stringify(canvasParams),
+      similarityScore: 0,
+      usageCount: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await db.add(STORES.PROMPT_HISTORY, newHistory);
+    return newHistory;
+  },
+
+  // 查找相似提示词
+  async findSimilar(prompt: string, userId: string | null = null, threshold: number = 0.7): Promise<PromptHistory | null> {
+    const allHistory = await db.getAll<PromptHistory>(STORES.PROMPT_HISTORY);
+    
+    // 过滤用户相关的记录（未登录用户只匹配userId为null的记录）
+    const filteredHistory = userId 
+      ? allHistory.filter(h => h.userId === userId || h.userId === null)
+      : allHistory.filter(h => h.userId === null);
+
+    // 计算相似度并排序
+    const sortedHistory = filteredHistory
+      .map(h => ({
+        ...h,
+        similarityScore: calculateSimilarity(prompt.trim().toLowerCase(), h.prompt.toLowerCase())
+      }))
+      .sort((a, b) => b.similarityScore - a.similarityScore);
+
+    // 找到相似度高于阈值的记录
+    const matched = sortedHistory.find(h => h.similarityScore >= threshold);
+    
+    if (matched) {
+      // 更新使用次数
+      const existing = await db.get<PromptHistory>(STORES.PROMPT_HISTORY, matched.id);
+      if (existing) {
+        existing.usageCount += 1;
+        existing.similarityScore = matched.similarityScore;
+        existing.updatedAt = new Date();
+        await db.put(STORES.PROMPT_HISTORY, existing);
+      }
+      
+      return { ...matched, canvasParams: existing?.canvasParams || matched.canvasParams };
+    }
+
+    return null;
+  },
+
+  // 获取所有提示词历史（按使用次数排序）
+  async getAll(userId: string | null = null): Promise<PromptHistory[]> {
+    const allHistory = await db.getAll<PromptHistory>(STORES.PROMPT_HISTORY);
+    
+    const filtered = userId 
+      ? allHistory.filter(h => h.userId === userId || h.userId === null)
+      : allHistory.filter(h => h.userId === null);
+
+    return filtered.sort((a, b) => b.usageCount - a.usageCount);
+  },
+
+  // 更新提示词记录的canvas参数
+  async updateParams(id: string, canvasParams: object): Promise<void> {
+    const history = await db.get<PromptHistory>(STORES.PROMPT_HISTORY, id);
+    if (!history) {
+      throw new Error("提示词记录不存在");
+    }
+
+    history.canvasParams = JSON.stringify(canvasParams);
+    history.updatedAt = new Date();
+    
+    await db.put(STORES.PROMPT_HISTORY, history);
+  },
+
+  // 删除提示词记录
+  async delete(id: string): Promise<void> {
+    await db.delete(STORES.PROMPT_HISTORY, id);
+  },
+
+  // 清空所有提示词历史
+  async clear(): Promise<void> {
+    await db.clear(STORES.PROMPT_HISTORY);
   },
 };

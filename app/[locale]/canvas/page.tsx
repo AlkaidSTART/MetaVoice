@@ -12,10 +12,22 @@ import {
   Save,
   Download,
   Sparkles,
+  Sun,
+  Home,
+  Flower2,
+  Star,
+  Cat,
+  Palette,
+  Brush,
+  Circle,
+  Square,
+  Triangle,
+  Type,
+  LineChart,
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { useRouter } from 'next/navigation';
-import { authDB, artworkDB } from '../lib/db';
+import { authDB, artworkDB, promptHistoryDB } from '../lib/db';
 import type { User as UserType } from '../lib/db';
 import { DrawInstruction } from '../lib/draw-schema';
 import XfyunVoiceInput from '../components/XfyunVoiceInput';
@@ -32,6 +44,7 @@ export default function CanvasPage() {
   const descriptionRef = useRef<HTMLDivElement>(null);
   const voiceAreaRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const thinkingIndicatorRef = useRef<HTMLDivElement>(null);
 
   const [sessionDescription, setSessionDescription] = useState('');
   const [transcript, setTranscript] = useState('');
@@ -44,6 +57,31 @@ export default function CanvasPage() {
   const [user, setUser] = useState<UserType | null>(null);
   const [brushVisible, setBrushVisible] = useState(false);
   const [brushPosition, setBrushPosition] = useState({ x: 0, y: 0 });
+  const [isThinking, setIsThinking] = useState(false);
+
+  // 预设模板数据 - 使用图标代替 emoji
+  const presetTemplates = [
+    { icon: 'Sun', title: '日出日落', prompt: '画一个美丽的日出场景，太阳从地平线升起' },
+    { icon: 'Home', title: '建筑房屋', prompt: '画一栋可爱的小房子' },
+    { icon: 'Flower2', title: '花朵植物', prompt: '画一朵漂亮的樱花' },
+    { icon: 'Star', title: '星星月亮', prompt: '画一个满天星空的夜晚' },
+    { icon: 'Cat', title: '可爱动物', prompt: '画一只橘色的小猫' },
+    { icon: 'Palette', title: '抽象艺术', prompt: '画一些几何图形组成的图案' },
+  ];
+
+  // 预设 Canvas 动画图形
+  const presetShapes = [
+    { type: 'circle', color: '#FFB7C5', size: 30 },
+    { type: 'square', color: '#B5D5F5', size: 25 },
+    { type: 'triangle', color: '#B5E8C7', size: 35 },
+    { type: 'star', color: '#FFE5A0', size: 28 },
+    { type: 'line', color: '#D4C5F5', length: 80 },
+  ];
+
+  const [currentPresetIndex, setCurrentPresetIndex] = useState(0);
+  const [currentShapeIndex, setCurrentShapeIndex] = useState(0);
+  const presetIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const shapeAnimationRef = useRef<number | null>(null);
 
   const [toasts, setToasts] = useState<{ id: string; type: 'success' | 'error' | 'warning' | 'info'; message: string }[]>([]);
   const toastIdCounter = useRef(0);
@@ -67,6 +105,121 @@ export default function CanvasPage() {
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // 绘制预设动画图形
+  const drawPresetShape = useCallback((ctx: CanvasRenderingContext2D, shapeType: string, color: string, size: number, x: number, y: number, progress: number) => {
+    ctx.save();
+    ctx.globalAlpha = 0.6 + (0.4 * Math.sin(progress * 0.1));
+    
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    
+    switch (shapeType) {
+      case 'circle':
+        ctx.beginPath();
+        ctx.arc(x, y, size * progress, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'square':
+        const squareSize = size * progress;
+        ctx.fillRect(x - squareSize / 2, y - squareSize / 2, squareSize, squareSize);
+        break;
+      case 'triangle':
+        const triSize = size * progress;
+        ctx.beginPath();
+        ctx.moveTo(x, y - triSize);
+        ctx.lineTo(x - triSize, y + triSize);
+        ctx.lineTo(x + triSize, y + triSize);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case 'star':
+        const starSize = size * progress;
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+          const x1 = x + Math.cos(angle) * starSize;
+          const y1 = y + Math.sin(angle) * starSize;
+          if (i === 0) ctx.moveTo(x1, y1);
+          else ctx.lineTo(x1, y1);
+        }
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case 'line':
+        ctx.beginPath();
+        ctx.moveTo(x - size, y);
+        ctx.lineTo(x + size * progress, y);
+        ctx.stroke();
+        break;
+    }
+    
+    ctx.restore();
+  }, []);
+
+  // Canvas 预设动画循环
+  const animatePresetShapes = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !isThinking) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // 清除画布
+    ctx.clearRect(0, 0, width, height);
+    
+    // 绘制多个漂浮的预设图形
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const time = Date.now() / 1000;
+    
+    presetShapes.forEach((shape, index) => {
+      const angle = (index * (Math.PI * 2)) / presetShapes.length + time * 0.2;
+      const radius = 100 + (index * 30);
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius + Math.sin(time + index) * 20;
+      const progress = 0.5 + 0.5 * Math.sin(time * 2 + index);
+      
+      drawPresetShape(ctx, shape.type, shape.color, shape.size || 30, x, y, progress);
+    });
+    
+    shapeAnimationRef.current = requestAnimationFrame(animatePresetShapes);
+  }, [isThinking, presetShapes, drawPresetShape]);
+
+  // 启动预设模板轮播动画和 Canvas 动画
+  const startPresetAnimation = useCallback(() => {
+    setCurrentPresetIndex(0);
+    // 每2秒切换一个预设模板
+    presetIntervalRef.current = setInterval(() => {
+      setCurrentPresetIndex((prev) => (prev + 1) % presetTemplates.length);
+    }, 2000);
+    // 启动 Canvas 图形动画
+    shapeAnimationRef.current = requestAnimationFrame(animatePresetShapes);
+  }, [presetTemplates.length, animatePresetShapes]);
+
+  // 停止预设模板轮播动画
+  const stopPresetAnimation = useCallback(() => {
+    if (presetIntervalRef.current) {
+      clearInterval(presetIntervalRef.current);
+      presetIntervalRef.current = null;
+    }
+    if (shapeAnimationRef.current) {
+      cancelAnimationFrame(shapeAnimationRef.current);
+      shapeAnimationRef.current = null;
+    }
+    // 清除 Canvas 画布
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -626,30 +779,58 @@ export default function CanvasPage() {
     }
 
     setIsDrawing(true);
+    setIsThinking(true);
     addToast('info', '正在生成绘图...');
 
-    try {
-      const response = await fetch('/api/draw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: sessionDescription }),
-      });
+    // 启动预设模板轮播动画
+    startPresetAnimation();
 
-      if (!response.ok) {
-        throw new Error('绘图生成失败');
+    try {
+      // 尝试查找相似提示词
+      const userId = user?.id || null;
+      const similarPrompt = await promptHistoryDB.findSimilar(sessionDescription, userId, 0.65);
+      
+      let instructions: DrawInstruction;
+      
+      if (similarPrompt) {
+        // 使用历史参数
+        instructions = JSON.parse(similarPrompt.canvasParams);
+        addToast('info', '找到相似提示词，使用历史结果');
+      } else {
+        // 调用 API 获取新参数
+        const response = await fetch('/api/draw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: sessionDescription }),
+        });
+
+        if (!response.ok) {
+          throw new Error('绘图生成失败');
+        }
+
+        instructions = await response.json();
+
+        // 保存新的提示词和参数到数据库
+        await promptHistoryDB.save(sessionDescription, instructions, userId);
       }
 
-      const instructions: DrawInstruction = await response.json();
+      // 停止预设动画
+      stopPresetAnimation();
+      setIsThinking(false);
+
+      // 清空预设背景，开始绘制用户图形
       drawShapes(instructions);
       setHasUnsavedChanges(true);
       addToast('success', '绘图完成，记得保存作品');
     } catch (error) {
       console.error('Draw error:', error);
+      stopPresetAnimation();
+      setIsThinking(false);
       addToast('error', '绘图失败，请重试');
     } finally {
       setIsDrawing(false);
     }
-  }, [sessionDescription, drawShapes, addToast]);
+  }, [sessionDescription, drawShapes, addToast, startPresetAnimation, stopPresetAnimation, user]);
 
   if (!user) {
     return (
@@ -746,6 +927,61 @@ export default function CanvasPage() {
               aria-label="绘图画布 - 通过语音指令控制绘图"
             />
 
+            {/* 预设模板动画覆盖层 - AI 思考时显示 */}
+            {isThinking && (
+              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10">
+                {/* 装饰性图形动画 */}
+                <div className="relative w-32 h-32 mb-6">
+                  <div className="absolute inset-0 border-4 border-sakura/20 rounded-full animate-ping" />
+                  <div className="absolute inset-4 border-4 border-lavender/30 rounded-full animate-ping" style={{ animationDelay: '0.3s' }} />
+                  <div className="absolute inset-8 border-4 border-macaron-blue/40 rounded-full animate-ping" style={{ animationDelay: '0.6s' }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Sparkles className="w-12 h-12 text-sakura animate-pulse" />
+                  </div>
+                </div>
+
+                {/* 预设模板卡片 */}
+                <div className="bg-gradient-to-br from-lavender/10 to-macaron-blue/10 rounded-2xl border border-lavender/20 p-6 max-w-md mx-4 shadow-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sakura/30 to-lavender/30 flex items-center justify-center">
+                      {(() => {
+                        const IconComponent = {
+                          Sun,
+                          Home,
+                          Flower2,
+                          Star,
+                          Cat,
+                          Palette,
+                        }[presetTemplates[currentPresetIndex].icon];
+                        return IconComponent ? <IconComponent className="w-6 h-6 text-text-primary" /> : null;
+                      })()}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-text-primary">{presetTemplates[currentPresetIndex].title}</h3>
+                      <p className="text-xs text-text-secondary">灵感示例</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-text-secondary bg-white/60 rounded-xl p-3 italic">
+                    &quot;{presetTemplates[currentPresetIndex].prompt}&quot;
+                  </p>
+                  <div className="flex justify-center gap-1 mt-4">
+                    {presetTemplates.map((_, idx) => (
+                      <div
+                        key={idx}
+                        className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                          idx === currentPresetIndex ? 'bg-sakura w-4' : 'bg-sakura/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <p className="mt-4 text-sm text-text-secondary">
+                  正在思考如何绘制你的作品...
+                </p>
+              </div>
+            )}
+
             {/* 画笔指针 */}
             <div
               className={`absolute pointer-events-none transition-opacity duration-300 ${brushVisible ? 'opacity-100' : 'opacity-0'}`}
@@ -756,56 +992,16 @@ export default function CanvasPage() {
                 zIndex: 100,
               }}
             >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                className="drop-shadow-lg"
-              >
-                {/* 画笔杆 */}
-                <rect
-                  x="10"
-                  y="8"
-                  width="4"
-                  height="12"
-                  rx="1"
-                  fill="#8B4513"
-                  stroke="#5D3A1A"
-                  strokeWidth="0.5"
+              <div className="relative">
+                <Brush className="w-8 h-8 text-text-primary drop-shadow-lg" />
+                {/* 画笔光晕效果 */}
+                <div
+                  className="absolute inset-0 -m-2 rounded-full animate-ping"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(255, 183, 197, 0.4) 0%, transparent 70%)',
+                  }}
                 />
-                {/* 画笔金属箍 */}
-                <rect
-                  x="9"
-                  y="5"
-                  width="6"
-                  height="4"
-                  rx="1"
-                  fill="#C0C0C0"
-                  stroke="#808080"
-                  strokeWidth="0.5"
-                />
-                {/* 画笔笔尖 */}
-                <path
-                  d="M10 2L12 0L14 2L12 24Z"
-                  fill="#FFB7C5"
-                  stroke="#FF6B8A"
-                  strokeWidth="0.5"
-                />
-                {/* 笔尖高光 */}
-                <path
-                  d="M11 2L12 0.5L12.5 2"
-                  fill="white"
-                  opacity="0.6"
-                />
-              </svg>
-              {/* 画笔光晕效果 */}
-              <div
-                className="absolute inset-0 -m-2 rounded-full animate-ping"
-                style={{
-                  background: 'radial-gradient(circle, rgba(255, 183, 197, 0.4) 0%, transparent 70%)',
-                }}
-              />
+              </div>
             </div>
 
             {/* 右上角装饰 - 操作提示 */}
@@ -905,12 +1101,13 @@ export default function CanvasPage() {
           </div>
         </div>
 
-        {/* Description Area - 缩小高度 */}
+        {/* Description & Voice Area */}
         <div
           ref={descriptionRef}
-          className="w-full max-w-3xl mt-4"
+          className="w-full max-w-4xl mt-4 flex gap-4"
         >
-          <section className="rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5">
+          {/* 绘图描述区域 */}
+          <section className="flex-1 rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5">
             <div className="flex items-center gap-2 px-5 pt-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-lavender/20 text-lavender">
                 <Sparkles className="h-4 w-4" />
@@ -918,6 +1115,27 @@ export default function CanvasPage() {
               <h2 className="text-sm font-semibold text-text-primary">
                 绘图描述
               </h2>
+              {/* AI 思考动效 */}
+              {isThinking && (
+                <div
+                  ref={thinkingIndicatorRef}
+                  className="ml-auto flex items-center gap-2"
+                >
+                  <span className="text-xs text-lavender">AI 正在思考</span>
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-2 h-2 rounded-full bg-lavender"
+                        style={{
+                          animation: 'pulse 1.4s ease-in-out infinite',
+                          animationDelay: `${i * 0.2}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-4 pt-2">
@@ -947,19 +1165,18 @@ export default function CanvasPage() {
               </div>
             </div>
           </section>
-        </div>
 
-        {/* Voice Control Area - 缩小高度 */}
-        <div
-          ref={voiceAreaRef}
-          className="w-full max-w-3xl mt-4 mb-4"
-        >
-          {/* 语音输入组件 */}
-          <XfyunVoiceInput
-            onTranscriptChange={handleTranscriptChange}
-            onFinalResult={handleFinalResult}
-            transcript={transcript}
-          />
+          {/* 语音输入区域 */}
+          <div
+            ref={voiceAreaRef}
+            className="w-auto"
+          >
+            <XfyunVoiceInput
+              onTranscriptChange={handleTranscriptChange}
+              onFinalResult={handleFinalResult}
+              transcript={transcript}
+            />
+          </div>
         </div>
       </div>
 

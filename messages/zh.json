@@ -74,6 +74,20 @@
     "recognitionError": "语音识别失败，请重试",
     "recognitionNotSupported": "您的浏览器不支持语音识别"
   },
+  "teaching": {
+    "title": "小小创作家",
+    "speakHint": "说一句完整画面，AI 会把它慢慢画出来。",
+    "appendHint": "画好以后，还可以继续说“再加一朵云”这样的补充。",
+    "listening": "正在认真听你说话，慢慢说也没关系。",
+    "thinking": "AI 画师正在想怎么把你的想法画出来。",
+    "appendMode": "现在可以继续补充画面，比如再加星星、彩虹或小动物。",
+    "undoAdd": "撤回刚刚添加的内容",
+    "examples": {
+      "scene1": "画一只在云上跳舞的小兔子",
+      "scene2": "画一座有彩虹的糖果城堡",
+      "append1": "再加一朵会发光的云"
+    }
+  },
   "toast": {
     "success": "成功",
     "error": "错误",

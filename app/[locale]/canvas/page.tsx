@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Image,
   LogOut,
@@ -30,14 +31,31 @@ import { useRouter } from 'next/navigation';
 import { authDB, artworkDB, promptHistoryDB } from '../lib/db';
 import type { User as UserType } from '../lib/db';
 import { DrawInstruction, Shape } from '../lib/draw-schema';
+import {
+  AddBatchHistoryEntry,
+  applyAddMany,
+  coolShapesByIds,
+  emptyState,
+  ensureIds,
+  moveShapesByIds,
+  removeShapeById,
+  serializeState,
+  stateFromInstruction,
+  warmShapesByIds,
+  type CanvasState,
+} from '../lib/canvas-state';
+import { parseCanvasEditCommand, resolveShapeIdsByHint } from '../lib/canvas-commands';
 import XfyunVoiceInput from '../components/XfyunVoiceInput';
 import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import WeChatBotPanel from '../components/WeChatBotPanel';
+import ChildGuide from '../components/ChildGuide';
 
 export default function CanvasPage() {
   const router = useRouter();
+  const tCanvas = useTranslations('canvas');
+  const tTeaching = useTranslations('teaching');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -54,11 +72,14 @@ export default function CanvasPage() {
   const [saveTitle, setSaveTitle] = useState('');
   const [currentArtworkId, setCurrentArtworkId] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [micState, setMicState] = useState<'idle' | 'recording' | 'processing'>('idle');
   const [user, setUser] = useState<UserType | null>(null);
   const [brushVisible, setBrushVisible] = useState(false);
   const [brushPosition, setBrushPosition] = useState({ x: 0, y: 0 });
   const [isThinking, setIsThinking] = useState(false);
+  const [canvasState, setCanvasState] = useState<CanvasState>(emptyState());
+  const [history, setHistory] = useState<AddBatchHistoryEntry[]>([]);
+  const [isAppending, setIsAppending] = useState(false);
+  const [activeShapeIds, setActiveShapeIds] = useState<string[]>([]);
 
   const CANVAS_WIDTH = 960;
   const CANVAS_HEIGHT = 720;
@@ -93,7 +114,6 @@ export default function CanvasPage() {
   ];
 
   const [currentPresetIndex, setCurrentPresetIndex] = useState(0);
-  const [currentShapeIndex, setCurrentShapeIndex] = useState(0);
   const presetIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shapeAnimationRef = useRef<number | null>(null);
 
@@ -248,10 +268,9 @@ export default function CanvasPage() {
   const handleFinalResult = useCallback((finalTranscript: string) => {
     if (finalTranscript.trim()) {
       setSessionDescription(finalTranscript);
-      setMicState('idle');
-      addToast('success', '识别结果已填入绘图描述');
+      addToast('success', tCanvas('voiceRecognized'));
     }
-  }, [addToast]);
+  }, [addToast, tCanvas]);
 
   // 移动画笔到指定位置
   const moveBrush = useCallback((x: number, y: number, duration: number = 0.3) => {
@@ -346,6 +365,61 @@ export default function CanvasPage() {
         return { x: shape.x, y: shape.y, w: 100, h: 100, cx: shape.x, cy: shape.y };
     }
   }, [toTopLeft]);
+
+  const getGroupBounds = useCallback((shapes: Shape[]) => {
+    if (shapes.length === 0) {
+      return { x: 0, y: 0, w: 0, h: 0, cx: CANVAS_WIDTH / 2, cy: CANVAS_HEIGHT / 2 };
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const shape of shapes) {
+      const bounds = getShapeBounds(shape);
+      minX = Math.min(minX, bounds.x);
+      minY = Math.min(minY, bounds.y);
+      maxX = Math.max(maxX, bounds.x + bounds.w);
+      maxY = Math.max(maxY, bounds.y + bounds.h);
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2,
+    };
+  }, [getShapeBounds]);
+
+  const resolvePositionCenter = useCallback((position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' | 'left' | 'right' | 'top' | 'bottom') => {
+    const marginX = 160;
+    const marginY = 140;
+
+    switch (position) {
+      case 'top-left':
+        return { x: marginX, y: marginY };
+      case 'top-right':
+        return { x: CANVAS_WIDTH - marginX, y: marginY };
+      case 'bottom-left':
+        return { x: marginX, y: CANVAS_HEIGHT - marginY };
+      case 'bottom-right':
+        return { x: CANVAS_WIDTH - marginX, y: CANVAS_HEIGHT - marginY };
+      case 'left':
+        return { x: marginX, y: CANVAS_HEIGHT / 2 };
+      case 'right':
+        return { x: CANVAS_WIDTH - marginX, y: CANVAS_HEIGHT / 2 };
+      case 'top':
+        return { x: CANVAS_WIDTH / 2, y: marginY };
+      case 'bottom':
+        return { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT - marginY };
+      case 'center':
+      default:
+        return { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
+    }
+  }, []);
 
   // 解析填充样式：优先 gradient，否则 fallback 到 fillColor 纯色
   // 返回 string 或 CanvasGradient，可直接赋给 ctx.fillStyle
@@ -716,6 +790,46 @@ export default function CanvasPage() {
     ctx.restore();
   }, [drawSingleShape, toTopLeft]);
 
+  const redrawFromState = useCallback((state: CanvasState) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillStyle = state.backgroundColor || '#FFFFFF';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const ordered = [...state.shapes].sort((a, b) => {
+      const za = a.z ?? 0;
+      const zb = b.z ?? 0;
+      return za - zb;
+    });
+
+    for (const shape of ordered) {
+      drawSingleShape(ctx, shape);
+    }
+
+    if (state.vignette?.strength) {
+      const grad = ctx.createRadialGradient(
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.3,
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        Math.max(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.75
+      );
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(0,0,0,${Math.max(0, Math.min(1, state.vignette.strength)) * 0.6})`);
+      ctx.save();
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.restore();
+    }
+  }, [drawSingleShape]);
+
   // 绘制图形到 Canvas（双缓冲 + 画笔动画）
   //
   // 核心改进：用离屏 canvas 作为「已提交图层」，每个元素动画完成后才 commit。
@@ -834,6 +948,83 @@ export default function CanvasPage() {
     );
   }, [moveBrush, drawSingleShape, drawProgressiveShape, getShapeBounds]);
 
+  const drawAppendBatch = useCallback(async (committedState: CanvasState, incomingShapes: Shape[]) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = CANVAS_WIDTH;
+    offscreen.height = CANVAS_HEIGHT;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
+
+    offCtx.fillStyle = committedState.backgroundColor || '#FFFFFF';
+    offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    for (const shape of [...committedState.shapes].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))) {
+      drawSingleShape(offCtx, shape);
+    }
+
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.drawImage(offscreen, 0, 0);
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const waitFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    for (const shape of [...incomingShapes].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))) {
+      const bounds = getShapeBounds(shape);
+      await moveBrush(bounds.x, bounds.y);
+
+      if (prefersReduced) {
+        drawSingleShape(offCtx, shape);
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.drawImage(offscreen, 0, 0);
+        continue;
+      }
+
+      const steps = 24;
+      for (let step = 0; step <= steps; step++) {
+        const progress = step / steps;
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.drawImage(offscreen, 0, 0);
+        drawProgressiveShape(ctx, shape, progress);
+        await waitFrame();
+      }
+
+      drawSingleShape(offCtx, shape);
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(offscreen, 0, 0);
+      await moveBrush(bounds.x + bounds.w, bounds.y + bounds.h, 0.2);
+    }
+
+    if (committedState.vignette?.strength) {
+      const grad = ctx.createRadialGradient(
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.3,
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        Math.max(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.75
+      );
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(0,0,0,${Math.max(0, Math.min(1, committedState.vignette?.strength ?? 0)) * 0.6})`);
+      ctx.save();
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.restore();
+    }
+
+    setTimeout(() => {
+      setBrushVisible(false);
+    }, 500);
+  }, [drawProgressiveShape, drawSingleShape, getShapeBounds, moveBrush]);
+
   // 初始化Canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -867,12 +1058,7 @@ export default function CanvasPage() {
 
     try {
       const thumbnail = canvas.toDataURL('image/png');
-      const canvasData = JSON.stringify({
-        width: canvas.width,
-        height: canvas.height,
-        description: sessionDescription,
-        timestamp: Date.now(),
-      });
+      const canvasData = serializeState(canvasState);
 
       if (currentArtworkId) {
         await artworkDB.update(currentArtworkId, {
@@ -881,12 +1067,13 @@ export default function CanvasPage() {
           canvasData,
         });
       } else {
-        await artworkDB.save({
+        const savedArtwork = await artworkDB.save({
           userId: user?.id || 'guest',
           title,
           thumbnail,
           canvasData,
         });
+        setCurrentArtworkId(savedArtwork.id);
       }
 
       setSaveModalOpen(false);
@@ -896,7 +1083,7 @@ export default function CanvasPage() {
       console.error('保存失败:', error);
       addToast('error', '保存失败，请重试');
     }
-  }, [canvasRef, sessionDescription, currentArtworkId, user, addToast]);
+  }, [canvasRef, canvasState, currentArtworkId, user, addToast]);
 
   // 新建画布（自动保存当前作品）
   const handleNewCanvas = useCallback(async () => {
@@ -906,12 +1093,7 @@ export default function CanvasPage() {
       if (canvas) {
         try {
           const thumbnail = canvas.toDataURL('image/png');
-          const canvasData = JSON.stringify({
-            width: canvas.width,
-            height: canvas.height,
-            description: sessionDescription,
-            timestamp: Date.now(),
-          });
+          const canvasData = serializeState(canvasState);
           const defaultTitle = sessionDescription.substring(0, 30) || '未命名作品';
 
           if (currentArtworkId) {
@@ -950,8 +1132,11 @@ export default function CanvasPage() {
     setTranscript('');
     setCurrentArtworkId(null);
     setHasUnsavedChanges(false);
+    setCanvasState(emptyState());
+    setHistory([]);
+    setIsAppending(false);
     addToast('success', '已创建新画布');
-  }, [hasUnsavedChanges, canvasRef, sessionDescription, currentArtworkId, user, addToast]);
+  }, [hasUnsavedChanges, canvasRef, canvasState, sessionDescription, currentArtworkId, user, addToast]);
 
   // 导出 PNG
   const exportPNG = useCallback(() => {
@@ -987,6 +1172,9 @@ export default function CanvasPage() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     setHasUnsavedChanges(true);
+    setCanvasState(emptyState());
+    setHistory([]);
+    setIsAppending(false);
     addToast('success', '画布已清空');
   }, [canvasRef, addToast]);
 
@@ -994,6 +1182,63 @@ export default function CanvasPage() {
   const openGallery = useCallback(() => {
     router.push('/gallery');
   }, [router]);
+
+  const applyLocalEditCommand = useCallback(async (prompt: string) => {
+    const command = parseCanvasEditCommand(prompt);
+    if (command.kind === 'none') return false;
+
+    const targetIds = resolveShapeIdsByHint(canvasState.shapes, command.targetHint, activeShapeIds);
+    if (targetIds.length === 0) {
+      addToast('warning', '还没有可调整的对象，请先继续画一个新元素');
+      return true;
+    }
+
+    let nextState = canvasState;
+    if (command.kind === 'move') {
+      const targetShapes = canvasState.shapes.filter((shape) => shape.id && targetIds.includes(shape.id));
+      const groupBounds = getGroupBounds(targetShapes);
+      const targetCenter = resolvePositionCenter(command.position);
+      nextState = moveShapesByIds(
+        canvasState,
+        targetIds,
+        targetCenter.x - groupBounds.cx,
+        targetCenter.y - groupBounds.cy
+      );
+      addToast('success', '位置已经调整好了');
+    } else if (command.kind === 'recolor-warm') {
+      nextState = warmShapesByIds(canvasState, targetIds, command.amount);
+      addToast('success', '颜色已经调暖一点了');
+    } else if (command.kind === 'recolor-cool') {
+      nextState = coolShapesByIds(canvasState, targetIds, command.amount);
+      addToast('success', '颜色已经调冷一点了');
+    }
+
+    setCanvasState(nextState);
+    setActiveShapeIds(targetIds);
+    setHasUnsavedChanges(true);
+    redrawFromState(nextState);
+    return true;
+  }, [activeShapeIds, addToast, canvasState, getGroupBounds, redrawFromState, resolvePositionCenter]);
+
+  const handleUndoAdd = useCallback(() => {
+    const lastEntry = history[history.length - 1];
+    if (!lastEntry) {
+      addToast('warning', tTeaching('undoAdd'));
+      return;
+    }
+
+    let nextState = canvasState;
+    for (const shapeId of lastEntry.shapeIds) {
+      nextState = removeShapeById(nextState, shapeId);
+    }
+
+    setCanvasState(nextState);
+    setHistory((prev) => prev.slice(0, -1));
+    redrawFromState(nextState);
+    setHasUnsavedChanges(true);
+    setIsAppending(nextState.shapes.length > 0);
+    addToast('success', tTeaching('undoAdd'));
+  }, [addToast, canvasState, history, redrawFromState, tTeaching]);
 
   // 发送画布到微信
   const sendCanvasToWeChat = useCallback(async () => {
@@ -1043,8 +1288,10 @@ export default function CanvasPage() {
       return;
     }
 
+    const appendMode = canvasState.shapes.length > 0;
     setIsDrawing(true);
     setIsThinking(true);
+    setIsAppending(appendMode);
     addToast('info', '正在生成绘图...');
 
     // 启动预设模板轮播动画
@@ -1066,7 +1313,16 @@ export default function CanvasPage() {
         const response = await fetch('/api/draw', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: sessionDescription }),
+          body: JSON.stringify({
+            prompt: sessionDescription,
+            appendPrompt: appendMode ? sessionDescription : undefined,
+            context: appendMode
+              ? {
+                  shapes: canvasState.shapes,
+                  backgroundColor: canvasState.backgroundColor,
+                }
+              : undefined,
+          }),
         });
 
         if (!response.ok) {
@@ -1083,8 +1339,25 @@ export default function CanvasPage() {
       stopPresetAnimation();
       setIsThinking(false);
 
-      // 清空预设背景，开始绘制用户图形
-      drawShapes(instructions);
+      if (!appendMode) {
+        const nextState = stateFromInstruction(instructions);
+        setCanvasState(nextState);
+        setHistory([]);
+        await drawShapes(instructions);
+      } else {
+        const preparedShapes = ensureIds(instructions.shapes);
+        const nextState = applyAddMany(canvasState, preparedShapes);
+        setCanvasState(nextState);
+        setHistory((prev) => [
+          ...prev,
+          {
+            kind: 'add-batch',
+            shapeIds: preparedShapes.map((shape) => shape.id!).filter(Boolean),
+          },
+        ]);
+        await drawAppendBatch(canvasState, preparedShapes);
+      }
+
       setHasUnsavedChanges(true);
       addToast('success', '绘图完成，记得保存作品');
 
@@ -1097,8 +1370,9 @@ export default function CanvasPage() {
       addToast('error', '绘图失败，请重试');
     } finally {
       setIsDrawing(false);
+      setIsAppending(false);
     }
-  }, [sessionDescription, drawShapes, addToast, startPresetAnimation, stopPresetAnimation, user, sendCanvasToWeChat]);
+  }, [sessionDescription, canvasState, drawShapes, drawAppendBatch, addToast, startPresetAnimation, stopPresetAnimation, user, sendCanvasToWeChat]);
 
   if (!user) {
     return (
@@ -1290,10 +1564,10 @@ export default function CanvasPage() {
             >
               <div className="flex flex-col gap-1">
                 <button
-                  onClick={() => addToast('info', '撤销功能开发中')}
+                  onClick={handleUndoAdd}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-sakura-light/20 hover:text-text-primary"
-                  aria-label="撤销"
-                  title="撤销"
+                  aria-label={tCanvas('undo')}
+                  title={tTeaching('undoAdd')}
                 >
                   <RotateCcw className="h-5 w-5" />
                 </button>
@@ -1355,6 +1629,25 @@ export default function CanvasPage() {
           ref={descriptionRef}
           className="grid shrink-0 grid-cols-[minmax(0,1fr)_280px] gap-3"
         >
+          <div className="flex min-w-0 flex-col gap-3">
+          <ChildGuide
+            mode={isThinking ? 'thinking' : isAppending ? 'appending' : transcript ? 'listening' : 'idle'}
+            hasArtwork={canvasState.shapes.length > 0}
+            lastTranscript={transcript || sessionDescription}
+            copy={{
+              title: tTeaching('title'),
+              speakHint: tTeaching('speakHint'),
+              appendHint: tTeaching('appendHint'),
+              listening: tTeaching('listening'),
+              thinking: tTeaching('thinking'),
+              appendMode: tTeaching('appendMode'),
+              examples: {
+                scene1: tTeaching('examples.scene1'),
+                scene2: tTeaching('examples.scene2'),
+                append1: tTeaching('examples.append1'),
+              },
+            }}
+          />
           <section className="rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5">
             <div className="flex items-center gap-2 px-4 pt-3">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lavender/20 text-lavender">
@@ -1387,7 +1680,7 @@ export default function CanvasPage() {
               <textarea
                 value={sessionDescription}
                 onChange={(event) => setSessionDescription(event.target.value)}
-                placeholder="输入绘图描述..."
+                placeholder={tCanvas('transcriptPlaceholder')}
                 className="min-h-[56px] w-full resize-none rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-primary outline-none transition-all placeholder:text-text-disabled focus:border-sakura focus:ring-2 focus:ring-sakura/30"
                 aria-label="绘图描述输入框"
               />
@@ -1395,7 +1688,7 @@ export default function CanvasPage() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="rounded-full bg-sakura-light px-2 py-1 text-sakura">单屏布局</span>
-                  <span>语音后再点开始绘图</span>
+                  <span>{canvasState.shapes.length > 0 ? tTeaching('appendHint') : tTeaching('speakHint')}</span>
                 </div>
                 <button
                   onClick={handleStartDrawing}
@@ -1413,6 +1706,7 @@ export default function CanvasPage() {
               </div>
             </div>
           </section>
+          </div>
 
           <div
             ref={voiceAreaRef}

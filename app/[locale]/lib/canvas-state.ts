@@ -18,6 +18,26 @@ export interface CanvasState {
   vignette?: DrawInstruction["vignette"];
 }
 
+export interface AddBatchHistoryEntry {
+  kind: "add-batch";
+  shapeIds: string[];
+}
+
+function clampColorChannel(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function mapHexColor(color: string, mapper: (r: number, g: number, b: number) => [number, number, number]) {
+  const match = color.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return color;
+  const hex = match[1];
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const [nr, ng, nb] = mapper(r, g, b);
+  return `#${clampColorChannel(nr).toString(16).padStart(2, "0")}${clampColorChannel(ng).toString(16).padStart(2, "0")}${clampColorChannel(nb).toString(16).padStart(2, "0")}`.toUpperCase();
+}
+
 /**
  * 操作（Command 模式）。
  * 每一轮用户输入会被解析成一组 op，依次 applyOp 到 state。
@@ -137,6 +157,89 @@ export function applyAddMany(state: CanvasState, incoming: Shape[]): CanvasState
 export function removeShapeById(state: CanvasState, id: string): CanvasState {
   if (!state.shapes.some((s) => s.id === id)) return state;
   return { ...state, shapes: state.shapes.filter((s) => s.id !== id) };
+}
+
+export function moveShapesByIds(state: CanvasState, ids: string[], dx: number, dy: number): CanvasState {
+  if (ids.length === 0) return state;
+  const idSet = new Set(ids);
+  return {
+    ...state,
+    shapes: state.shapes.map((shape) => {
+      if (!shape.id || !idSet.has(shape.id)) return shape;
+
+      const next: Shape = {
+        ...shape,
+        x: shape.x + dx,
+        y: shape.y + dy,
+      };
+
+      if (shape.x2 != null) next.x2 = shape.x2 + dx;
+      if (shape.y2 != null) next.y2 = shape.y2 + dy;
+      if (shape.points) {
+        next.points = shape.points.map((value, index) => value + (index % 2 === 0 ? dx : dy));
+      }
+
+      return next;
+    }),
+  };
+}
+
+export function warmShapesByIds(state: CanvasState, ids: string[], amount: number): CanvasState {
+  if (ids.length === 0) return state;
+  const idSet = new Set(ids);
+  return {
+    ...state,
+    shapes: state.shapes.map((shape) => {
+      if (!shape.id || !idSet.has(shape.id)) return shape;
+      return {
+        ...shape,
+        fillColor: shape.fillColor
+          ? mapHexColor(shape.fillColor, (r, g, b) => [r + amount, g + amount / 3, b - amount / 3])
+          : shape.fillColor,
+        strokeColor: shape.strokeColor
+          ? mapHexColor(shape.strokeColor, (r, g, b) => [r + amount, g + amount / 3, b - amount / 3])
+          : shape.strokeColor,
+        gradient: shape.gradient
+          ? {
+              ...shape.gradient,
+              stops: shape.gradient.stops.map((stop) => ({
+                ...stop,
+                color: mapHexColor(stop.color, (r, g, b) => [r + amount, g + amount / 3, b - amount / 3]),
+              })),
+            }
+          : shape.gradient,
+      };
+    }),
+  };
+}
+
+export function coolShapesByIds(state: CanvasState, ids: string[], amount: number): CanvasState {
+  if (ids.length === 0) return state;
+  const idSet = new Set(ids);
+  return {
+    ...state,
+    shapes: state.shapes.map((shape) => {
+      if (!shape.id || !idSet.has(shape.id)) return shape;
+      return {
+        ...shape,
+        fillColor: shape.fillColor
+          ? mapHexColor(shape.fillColor, (r, g, b) => [r - amount / 3, g + amount / 4, b + amount])
+          : shape.fillColor,
+        strokeColor: shape.strokeColor
+          ? mapHexColor(shape.strokeColor, (r, g, b) => [r - amount / 3, g + amount / 4, b + amount])
+          : shape.strokeColor,
+        gradient: shape.gradient
+          ? {
+              ...shape.gradient,
+              stops: shape.gradient.stops.map((stop) => ({
+                ...stop,
+                color: mapHexColor(stop.color, (r, g, b) => [r - amount / 3, g + amount / 4, b + amount]),
+              })),
+            }
+          : shape.gradient,
+      };
+    }),
+  };
 }
 
 /**

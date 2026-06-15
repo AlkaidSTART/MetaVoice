@@ -74,6 +74,20 @@
     "recognitionError": "Voice recognition failed, please try again",
     "recognitionNotSupported": "Your browser does not support voice recognition"
   },
+  "teaching": {
+    "title": "Little Creator",
+    "speakHint": "Say a full scene and the AI artist will draw it step by step.",
+    "appendHint": "After the first picture, you can keep going with prompts like “add one more cloud”.",
+    "listening": "I am listening carefully. Slow and simple is fine.",
+    "thinking": "The AI artist is planning how to draw your idea.",
+    "appendMode": "You can keep growing the picture with stars, rainbows, or little animals.",
+    "undoAdd": "Undo the last added part",
+    "examples": {
+      "scene1": "Draw a bunny dancing on a cloud",
+      "scene2": "Draw a candy castle with a rainbow",
+      "append1": "Add one glowing cloud"
+    }
+  },
   "toast": {
     "success": "Success",
     "error": "Error",

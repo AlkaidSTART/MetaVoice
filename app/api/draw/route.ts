@@ -1,7 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
 import { drawInstructionSchema } from "../../lib/draw-schema";
-import type { DrawInstruction } from "../../lib/draw-schema";
+import type { DrawInstruction, Shape } from "../../lib/draw-schema";
 
 // 画布尺寸（与渲染层 app/[locale]/canvas/page.tsx 严格一致）
 const CANVAS_WIDTH = 960;
@@ -46,6 +46,12 @@ function getModel(): LanguageModel {
 interface DrawContext {
   shapes: Shape[];
   backgroundColor?: string;
+}
+
+interface DrawRequest {
+  prompt: string;
+  context?: DrawContext;
+  appendPrompt?: string;
 }
 
 /**
@@ -263,9 +269,19 @@ ${plan}
 
 export async function POST(req: Request) {
   try {
-    const { prompt } = await req.json();
+    const body = (await req.json()) as DrawRequest;
+    const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    const appendPrompt = typeof body.appendPrompt === "string" ? body.appendPrompt : "";
+    const effectivePrompt = appendPrompt.trim() || prompt.trim();
+    const context =
+      body.context && Array.isArray(body.context.shapes)
+        ? {
+            shapes: body.context.shapes,
+            backgroundColor: body.context.backgroundColor,
+          }
+        : undefined;
 
-    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    if (!effectivePrompt) {
       return Response.json({ error: "prompt is required" }, { status: 400 });
     }
 
@@ -278,7 +294,7 @@ export async function POST(req: Request) {
     }
 
     // Step A：场景规划（让 LLM 像绘图师一样拆解用户意图）
-    const plan = await planScene(prompt.trim(), model);
+    const plan = await planScene(effectivePrompt, model, context);
 
     // Step B：把方案翻译成严格 JSON 绘图指令
     const instruction = await generateDrawJson(plan, model);

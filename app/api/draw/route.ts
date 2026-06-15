@@ -42,6 +42,32 @@ function getModel(): LanguageModel {
   return openai.chat(modelName) as unknown as LanguageModel;
 }
 
+/** 多轮创作的上下文：现有画布元素 + 背景色，供增量规划时避让与衔接 */
+interface DrawContext {
+  shapes: Shape[];
+  backgroundColor?: string;
+}
+
+/**
+ * 把现有画布元素压缩成给 LLM 看的「画布现状摘要」。
+ * 只保留规划需要的语义信息（label/type/大致坐标/尺寸/颜色），剔除渲染细节，
+ * 控制 token 又能让 LLM 知道画面已有什么、在哪。
+ */
+function summarizeContext(ctx: DrawContext): string {
+  if (!ctx.shapes || ctx.shapes.length === 0) return "（当前画布为空）";
+  const lines = ctx.shapes.map((s, i) => {
+    const label = s.label || `元素${i + 1}`;
+    const pos = `(${Math.round(s.x)},${Math.round(s.y)})`;
+    const size =
+      s.radius != null ? `r=${s.radius}` :
+      s.width != null ? `${s.width}×${s.height ?? ""}` :
+      s.rx != null ? `${s.rx}×${s.ry ?? ""}` : "";
+    const color = s.fillColor || (s.gradient?.stops?.[0]?.color ?? "");
+    return `  - ${label}: ${s.type} @ ${pos} ${size} ${color}`.trim();
+  });
+  return `当前画布背景 ${ctx.backgroundColor || "#FFFFFF"}，已有元素：\n${lines.join("\n")}`;
+}
+
 /**
  * Step A · Prompt 预处理（绘图规划师）
  *
@@ -51,8 +77,52 @@ function getModel(): LanguageModel {
  * 让后续 Step B 的 JSON 生成更稳定、布局更合理。
  *
  * 输出仍为自然语言文本（方案描述），不要求 JSON。
+ *
+ * 当传入 ctx（多轮追加）时，切换为「增量规划」模式：
+ * 只规划新增元素，避免重复已有元素，并要求为每个元素命名 label。
  */
-async function planScene(userPrompt: string, model: LanguageModel): Promise<string> {
+async function planScene(
+  userPrompt: string,
+  model: LanguageModel,
+  ctx?: DrawContext,
+): Promise<string> {
+  // 多轮追加：切换为增量规划，只规划「新增」元素，并给每个元素命名 label。
+  if (ctx) {
+    const ctxSummary = summarizeContext(ctx);
+    const planPrompt = `你是一位资深 Canvas 几何绘图规划师。用户要在**已有画面上继续添加内容**，请只规划**新增**的元素，不要重复画布上已经存在的东西。
+
+【画布】${CANVAS_WIDTH}×${CANVAS_HEIGHT} 像素，左上角为原点 (0,0)，x 向右、y 向下。
+
+【可用形状】rectangle（矩形）、circle（圆形）、ellipse（椭圆）、triangle（三角形）、polygon（任意多边形，如五角星）、line（直线）、text（文字）。
+
+${ctxSummary}
+
+【用户本轮指令】"${userPrompt}"
+
+请输出一份**增量方案**（纯文本，不要 JSON），只包含本轮新增的元素：
+1. **元素清单**：逐条列出本轮新增的元素，每条包含：
+   - 元素名（label，如"小鸟"/"太阳"，简短中文，供后续「把它移到左上角」指代用）
+   - 形状类型（一个物体可拆成多个 shape，每个 shape 都要列）
+   - 颜色（HEX）
+   - 大致位置（语义 + 像素坐标范围，x∈[0,${CANVAS_WIDTH}], y∈[0,${CANVAS_HEIGHT}]）
+   - 尺寸（具体像素）
+   - 图层顺序（z 值要大于现有元素的最大 z，保证画在已有元素之上或合适位置）
+2. **与现有元素的关系**：说明新元素放在哪里、是否与已有元素相邻/遮挡，避免严重重叠已有主体。
+
+要求：
+- 严禁输出画布上已存在的元素。如果用户指令其实是想修改已有元素（如"把太阳变大"），仍按"删掉旧的+画个新的"来规划，但明确标注。
+- 给每个新增的 shape 一个有意义的 label。
+- 控制新增数量，避免画面拥挤。`;
+
+    const result = await generateText({
+      model,
+      temperature: 0.4,
+      prompt: planPrompt,
+    });
+    return result.text.trim();
+  }
+
+  // 单轮首屏（无 context）：保持原有行为，零回归
   const planPrompt = `你是一位资深 Canvas 几何绘图规划师。请把用户的口语化绘图指令，拆解成一份**详细的几何绘图方案**。
 
 【画布】${CANVAS_WIDTH}×${CANVAS_HEIGHT} 像素，左上角为原点 (0,0)，x 向右、y 向下。

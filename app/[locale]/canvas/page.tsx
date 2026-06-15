@@ -347,8 +347,44 @@ export default function CanvasPage() {
     }
   }, [toTopLeft]);
 
+  // 解析填充样式：优先 gradient，否则 fallback 到 fillColor 纯色
+  // 返回 string 或 CanvasGradient，可直接赋给 ctx.fillStyle
+  const resolveFillStyle = useCallback(
+    (ctx: CanvasRenderingContext2D, shape: Shape, bounds: { x: number; y: number; w: number; h: number; cx: number; cy: number }): string | CanvasGradient | null => {
+      const g = shape.gradient;
+      if (g && g.stops.length >= 2) {
+        if (g.type === 'radial') {
+          // 径向渐变：从几何中心向最远顶点扩散，模拟球体光照
+          const maxR = Math.max(bounds.w, bounds.h) / 2;
+          const r = Math.max(1, maxR);
+          const grad = ctx.createRadialGradient(bounds.cx, bounds.cy, 0, bounds.cx, bounds.cy, r);
+          for (const stop of g.stops) {
+            grad.addColorStop(Math.max(0, Math.min(1, stop.offset)), stop.color);
+          }
+          return grad;
+        }
+        // linear：按 angle 计算起点终点（默认 180 = 上→下）
+        const angle = ((g.angle ?? 180) * Math.PI) / 180;
+        const dx = Math.sin(angle);
+        const dy = -Math.cos(angle);
+        const half = Math.max(bounds.w, bounds.h) / 2;
+        const x1 = bounds.cx - dx * half;
+        const y1 = bounds.cy - dy * half;
+        const x2 = bounds.cx + dx * half;
+        const y2 = bounds.cy + dy * half;
+        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+        for (const stop of g.stops) {
+          grad.addColorStop(Math.max(0, Math.min(1, stop.offset)), stop.color);
+        }
+        return grad;
+      }
+      return shape.fillColor || null;
+    },
+    []
+  );
+
   // 把单个 shape 静态绘制到给定 ctx（完整、不带动画）
-  // 支持 anchor 解析、rotation、opacity、ellipse、polygon、fontWeight
+  // 支持 anchor 解析、rotation、opacity、渐变、投影阴影、发光、高光
   const drawSingleShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape) => {
     const bounds = getShapeBounds(shape);
     const rotation = shape.rotation || 0;
@@ -364,39 +400,112 @@ export default function CanvasPage() {
       ctx.translate(-bounds.cx, -bounds.cy);
     }
 
-    const fill = shape.fillColor;
-    const stroke = shape.strokeColor;
     const lineW = shape.strokeWidth || 2;
 
+    // 发光光晕：用大 shadowBlur 二次绘制一个透明主体，制造柔和光晕
+    if (shape.glow) {
+      ctx.save();
+      ctx.shadowColor = shape.glow.color;
+      ctx.shadowBlur = shape.glow.blur;
+      ctx.fillStyle = shape.glow.color;
+      drawShapePath(ctx, shape);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 投影阴影：设到 ctx，主体 fill/stroke 时自动应用
+    if (shape.shadow) {
+      ctx.shadowColor = shape.shadow.color;
+      ctx.shadowBlur = shape.shadow.blur;
+      ctx.shadowOffsetX = shape.shadow.offsetX;
+      ctx.shadowOffsetY = shape.shadow.offsetY;
+    }
+
+    // 主体绘制（渐变优先，否则纯色）
+    const fill = resolveFillStyle(ctx, shape, bounds);
+    const stroke = shape.strokeColor;
+
+    // text 类型无几何路径，直接 fillText（仍受 shadow/opacity 影响）
+    if (shape.type === 'text') {
+      const size = shape.fontSize || 24;
+      const weight = shape.fontWeight === 'bold' ? 'bold ' : '';
+      ctx.font = `${weight}${size}px PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = fill || '#1A1A1A';
+      ctx.fillText(shape.text || '', shape.x, shape.y);
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.strokeText(shape.text || '', shape.x, shape.y);
+      }
+      ctx.restore();
+      return;
+    }
+
+    const fillThenStroke = () => {
+      if (fill) {
+        ctx.fillStyle = fill;
+        drawShapePath(ctx, shape);
+        ctx.fill();
+      }
+      // 阴影只应用一次：填充后立即清除，避免描边又叠一层阴影
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        drawShapePath(ctx, shape);
+        ctx.stroke();
+      }
+    };
+    fillThenStroke();
+
+    // 高光斑：球体表面反光（光源方向的亮斑）
+    if (shape.highlight) {
+      const hl = shape.highlight;
+      const hx = bounds.cx + hl.x * (bounds.w / 2);
+      const hy = bounds.cy + hl.y * (bounds.h / 2);
+      const hr = Math.max(1, hl.radius);
+      const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+      hg.addColorStop(0, `rgba(255,255,255,${hl.opacity})`);
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save();
+      // 用 clip 限制高光不溢出形状边界
+      drawShapePath(ctx, shape);
+      ctx.clip();
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }, [getShapeBounds, resolveFillStyle]);
+
+  // 构建 shape 的路径（不填充、不描边），供 fill/stroke/clip 复用
+  // 注意：line 类型无闭合路径，text 用 fillText 直接绘制（此处仅处理几何形状）
+  function drawShapePath(ctx: CanvasRenderingContext2D, shape: Shape) {
     switch (shape.type) {
       case 'rectangle': {
         const w = shape.width || 100;
         const h = shape.height || 100;
         const { x, y } = toTopLeft(shape);
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fillRect(x, y, w, h);
-        }
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineW;
-          ctx.strokeRect(x, y, w, h);
-        }
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
         break;
       }
       case 'circle': {
         const r = Math.max(1, shape.radius || 50);
         ctx.beginPath();
         ctx.arc(shape.x, shape.y, r, 0, Math.PI * 2);
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineW;
-          ctx.stroke();
-        }
         break;
       }
       case 'ellipse': {
@@ -404,15 +513,6 @@ export default function CanvasPage() {
         const ry = Math.max(1, shape.ry || 30);
         ctx.beginPath();
         ctx.ellipse(shape.x, shape.y, rx, ry, 0, 0, Math.PI * 2);
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineW;
-          ctx.stroke();
-        }
         break;
       }
       case 'line': {
@@ -421,66 +521,35 @@ export default function CanvasPage() {
         ctx.beginPath();
         ctx.moveTo(shape.x, shape.y);
         ctx.lineTo(endX, endY);
-        ctx.strokeStyle = stroke || '#1A1A1A';
-        ctx.lineWidth = lineW;
-        ctx.stroke();
         break;
       }
       case 'triangle': {
         const w = shape.width || 100;
         const h = shape.height || 100;
         const { x, y } = toTopLeft(shape);
-        // 等腰三角形，底边在下，顶点在上
         ctx.beginPath();
         ctx.moveTo(x + w / 2, y);
         ctx.lineTo(x + w, y + h);
         ctx.lineTo(x, y + h);
         ctx.closePath();
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineW;
-          ctx.stroke();
-        }
         break;
       }
       case 'polygon': {
         const pts = shape.points || [];
-        if (pts.length < 6) break;
+        if (pts.length < 6) return;
         ctx.beginPath();
         ctx.moveTo(pts[0], pts[1]);
         for (let i = 2; i + 1 < pts.length; i += 2) {
           ctx.lineTo(pts[i], pts[i + 1]);
         }
         ctx.closePath();
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        if (stroke) {
-          ctx.strokeStyle = stroke;
-          ctx.lineWidth = lineW;
-          ctx.stroke();
-        }
         break;
       }
-      case 'text': {
-        const size = shape.fontSize || 24;
-        const weight = shape.fontWeight === 'bold' ? 'bold ' : '';
-        ctx.font = `${weight}${size}px PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif`;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = fill || '#1A1A1A';
-        ctx.fillText(shape.text || '', shape.x, shape.y);
+      // text 无几何路径，由调用方特殊处理
+      default:
         break;
-      }
     }
-
-    ctx.restore();
-  }, [getShapeBounds, toTopLeft]);
+  }
 
   // 把单个 shape 按 progress (0-1) 绘制"生长中"的预览（描边渐进 + 后半段淡入填充）
   const drawProgressiveShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape, progress: number) => {
@@ -725,6 +794,31 @@ export default function CanvasPage() {
       ctx.drawImage(offscreen, 0, 0);
 
       await moveBrush(bounds.x + bounds.w, bounds.y + bounds.h, 0.2);
+    }
+
+    // 全局氛围：vignette 边缘暗角，增加画面聚焦感
+    // 同时应用到离屏层（保证导出/保存时也带暗角）和主画布
+    if (instructions.vignette && instructions.vignette.strength > 0) {
+      const strength = Math.max(0, Math.min(1, instructions.vignette.strength));
+      const applyVignette = (targetCtx: CanvasRenderingContext2D) => {
+        const grad = targetCtx.createRadialGradient(
+          CANVAS_WIDTH / 2,
+          CANVAS_HEIGHT / 2,
+          Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.3,
+          CANVAS_WIDTH / 2,
+          CANVAS_HEIGHT / 2,
+          Math.max(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.75
+        );
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, `rgba(0,0,0,${strength * 0.6})`);
+        targetCtx.save();
+        targetCtx.fillStyle = grad;
+        targetCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        targetCtx.restore();
+      };
+      applyVignette(offCtx);
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(offscreen, 0, 0);
     }
 
     // 完成后隐藏画笔

@@ -34,6 +34,7 @@ import XfyunVoiceInput from '../components/XfyunVoiceInput';
 import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import WeChatBotPanel from '../components/WeChatBotPanel';
 
 export default function CanvasPage() {
   const router = useRouter();
@@ -822,6 +823,9 @@ export default function CanvasPage() {
       drawShapes(instructions);
       setHasUnsavedChanges(true);
       addToast('success', '绘图完成，记得保存作品');
+
+      // 自动发送到微信
+      await sendCanvasToWeChat();
     } catch (error) {
       console.error('Draw error:', error);
       stopPresetAnimation();
@@ -831,6 +835,47 @@ export default function CanvasPage() {
       setIsDrawing(false);
     }
   }, [sessionDescription, drawShapes, addToast, startPresetAnimation, stopPresetAnimation, user]);
+
+  // 发送画布到微信
+  const sendCanvasToWeChat = useCallback(async () => {
+    if (!canvasRef.current) return;
+
+    try {
+      // 检查机器人状态
+      const statusResponse = await fetch('/api/wechat/send');
+      const status = await statusResponse.json();
+      
+      if (!status.ready || !status.hasTargetContact) {
+        return; // 机器人未就绪或未绑定联系人，不发送
+      }
+
+      // 将画布转换为图片
+      const canvas = canvasRef.current;
+      const imageData = canvas.toDataURL('image/png');
+      
+      // 转换为 Blob
+      const response = await fetch(imageData);
+      const blob = await response.blob();
+      
+      // 创建 FormData
+      const formData = new FormData();
+      formData.append('image', blob, 'canvas.png');
+      
+      // 发送到 API
+      const result = await fetch('/api/wechat/send', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await result.json();
+      
+      if (data.success) {
+        addToast('success', '已自动发送到微信');
+      }
+    } catch (error) {
+      console.error('Auto send to WeChat error:', error);
+    }
+  }, [canvasRef, addToast]);
 
   if (!user) {
     return (
@@ -1007,19 +1052,20 @@ export default function CanvasPage() {
             {/* 右上角装饰 - 操作提示 */}
             <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm rounded-xl border border-sakura/10 shadow-sm px-4 py-2">
               <p className="text-xs text-text-secondary">
-                试试说：
-                <span className="text-sakura font-medium ml-1">
-                  &quot; 画一个红色圆形&quot;
-                </span>
+                试试说：<span className="text-sakura font-medium">画一个圆形</span>
               </p>
             </div>
           </div>
 
-          {/* Sidebar Toolbar */}
-          <div
-            ref={toolbarRef}
-            className="bg-surface/95 backdrop-blur-sm rounded-2xl border border-sakura/10 shadow-lg p-3 flex flex-col gap-1"
-          >
+          {/* WeChat Bot Sidebar */}
+          <WeChatBotPanel canvasRef={canvasRef} />
+        </div>
+
+        {/* Sidebar Toolbar */}
+        <div
+          ref={toolbarRef}
+          className="bg-surface/95 backdrop-blur-sm rounded-2xl border border-sakura/10 shadow-lg p-3 flex flex-col gap-1"
+        >
             {/* 撤销 */}
             <button
               onClick={() => addToast('info', '撤销功能开发中')}

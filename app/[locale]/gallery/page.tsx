@@ -11,6 +11,7 @@ import {
   Check,
   Layers,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import gsap from "gsap";
 import { authDB, artworkDB, Artwork, User as UserType } from "../lib/db";
@@ -200,6 +201,14 @@ export default function GalleryPage() {
         className="h-14 bg-surface/80 backdrop-blur-sm border-b border-sakura/10 flex items-center justify-between px-6 sticky top-0 z-10"
       >
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push("/canvas")}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
+            aria-label="返回画板"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm hidden sm:inline">画板</span>
+          </button>
           {!selectionMode ? (
             <button
               onClick={toggleSelectionMode}

@@ -1466,15 +1466,18 @@ export default function CanvasPage() {
             {/* Canvas */}
             <canvas
               ref={canvasRef}
-              className="absolute inset-0"
-              style={{ width: '100%', height: '100%' }}
+              className="absolute inset-0 m-auto max-w-full max-h-full"
+              style={{ 
+                objectFit: 'contain',
+                imageRendering: 'crisp-edges'
+              }}
               role="img"
               aria-label="绘图画布 - 通过语音指令控制绘图"
             />
 
             {/* 预设模板动画覆盖层 - AI 思考时显示 */}
             {isThinking && (
-              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10">
+              <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center z-10">
                 {/* 装饰性图形动画 */}
                 <div className="relative w-32 h-32 mb-6">
                   <div className="absolute inset-0 border-4 border-sakura/20 rounded-full animate-ping" />

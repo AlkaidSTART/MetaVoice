@@ -56,7 +56,7 @@ export default function LanguageSwitcher() {
   }, []);
 
   return (
-    <div className="relative">
+    <div className="relative z-[100]">
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
@@ -73,7 +73,7 @@ export default function LanguageSwitcher() {
       {isOpen && (
         <div
           ref={dropdownRef}
-          className="absolute top-full mt-2 right-0 bg-white rounded-xl border border-sakura/10 shadow-lg overflow-hidden z-50"
+          className="absolute top-full mt-2 right-0 bg-white rounded-xl border border-sakura/10 shadow-lg overflow-hidden z-[100]"
         >
           {locales.map((l) => (
             <button

@@ -29,7 +29,7 @@ import { gsap } from 'gsap';
 import { useRouter } from 'next/navigation';
 import { authDB, artworkDB, promptHistoryDB } from '../lib/db';
 import type { User as UserType } from '../lib/db';
-import { DrawInstruction } from '../lib/draw-schema';
+import { DrawInstruction, Shape } from '../lib/draw-schema';
 import XfyunVoiceInput from '../components/XfyunVoiceInput';
 import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
@@ -267,358 +267,478 @@ export default function CanvasPage() {
     });
   }, [brushPosition]);
 
-  // 绘制单个图形（不带清除画布）
-  const drawSingleShape = useCallback((ctx: CanvasRenderingContext2D, shape: DrawInstruction['shapes'][0]) => {
-    ctx.beginPath();
-    
+  // 把 anchor=center/bottom-right 的语义坐标转换为"左上角"绝对坐标
+  // 这样渲染层统一以左上角为锚点，避免歧义
+  const toTopLeft = useCallback((shape: Shape) => {
+    const anchor = shape.anchor;
+    if (anchor === 'top-left' || !anchor) {
+      return { x: shape.x, y: shape.y };
+    }
+    switch (shape.type) {
+      case 'circle':
+      case 'ellipse':
+      case 'polygon':
+        // 已是几何中心
+        return anchor === 'center' ? { x: shape.x, y: shape.y } : { x: shape.x, y: shape.y };
+      case 'rectangle':
+      case 'triangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        if (anchor === 'center') return { x: shape.x - w / 2, y: shape.y - h / 2 };
+        return { x: shape.x - w, y: shape.y - h }; // bottom-right
+      }
+      case 'text': {
+        // text 的 center 近似按宽度居中（测量需在调用时进行，这里仅近似平移）
+        return { x: shape.x, y: shape.y };
+      }
+      default:
+        return { x: shape.x, y: shape.y };
+    }
+  }, []);
+
+  // 计算单个 shape 的几何包围盒（左上角坐标系），用于动画裁剪与画笔定位
+  const getShapeBounds = useCallback((shape: Shape) => {
+    const tl = toTopLeft(shape);
+    switch (shape.type) {
+      case 'rectangle':
+      case 'triangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        return { x: tl.x, y: tl.y, w, h, cx: tl.x + w / 2, cy: tl.y + h / 2 };
+      }
+      case 'circle': {
+        const r = shape.radius || 50;
+        return { x: shape.x - r, y: shape.y - r, w: r * 2, h: r * 2, cx: shape.x, cy: shape.y };
+      }
+      case 'ellipse': {
+        const rx = shape.rx || 50;
+        const ry = shape.ry || 30;
+        return { x: shape.x - rx, y: shape.y - ry, w: rx * 2, h: ry * 2, cx: shape.x, cy: shape.y };
+      }
+      case 'line': {
+        const endX = shape.x2 ?? shape.x + 100;
+        const endY = shape.y2 ?? shape.y;
+        const minX = Math.min(shape.x, endX);
+        const maxX = Math.max(shape.x, endX);
+        const minY = Math.min(shape.y, endY);
+        const maxY = Math.max(shape.y, endY);
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+      }
+      case 'polygon': {
+        const pts = shape.points || [];
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (let i = 0; i + 1 < pts.length; i += 2) {
+          minX = Math.min(minX, pts[i]);
+          minY = Math.min(minY, pts[i + 1]);
+          maxX = Math.max(maxX, pts[i]);
+          maxY = Math.max(maxY, pts[i + 1]);
+        }
+        if (!isFinite(minX)) return { x: shape.x, y: shape.y, w: 100, h: 100, cx: shape.x, cy: shape.y };
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+      }
+      case 'text': {
+        // 粗略估算
+        const size = shape.fontSize || 24;
+        const len = (shape.text || '').length;
+        return { x: shape.x, y: shape.y - size, w: len * size * 0.6, h: size * 1.4, cx: shape.x + (len * size * 0.6) / 2, cy: shape.y - size / 2 };
+      }
+      default:
+        return { x: shape.x, y: shape.y, w: 100, h: 100, cx: shape.x, cy: shape.y };
+    }
+  }, [toTopLeft]);
+
+  // 把单个 shape 静态绘制到给定 ctx（完整、不带动画）
+  // 支持 anchor 解析、rotation、opacity、ellipse、polygon、fontWeight
+  const drawSingleShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape) => {
+    const bounds = getShapeBounds(shape);
+    const rotation = shape.rotation || 0;
+    const opacity = shape.opacity ?? 1;
+
+    ctx.save();
+    if (opacity !== 1) ctx.globalAlpha = opacity;
+
+    // 围绕几何中心旋转
+    if (rotation) {
+      ctx.translate(bounds.cx, bounds.cy);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.translate(-bounds.cx, -bounds.cy);
+    }
+
+    const fill = shape.fillColor;
+    const stroke = shape.strokeColor;
+    const lineW = shape.strokeWidth || 2;
+
     switch (shape.type) {
       case 'rectangle': {
         const w = shape.width || 100;
         const h = shape.height || 100;
-        if (shape.fillColor) {
-          ctx.fillStyle = shape.fillColor;
-          ctx.fillRect(shape.x, shape.y, w, h);
+        const { x, y } = toTopLeft(shape);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fillRect(x, y, w, h);
         }
-        if (shape.strokeColor) {
-          ctx.strokeStyle = shape.strokeColor;
-          ctx.lineWidth = shape.strokeWidth || 2;
-          ctx.strokeRect(shape.x, shape.y, w, h);
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineW;
+          ctx.strokeRect(x, y, w, h);
         }
         break;
       }
       case 'circle': {
-        const r = shape.radius || 50;
+        const r = Math.max(1, shape.radius || 50);
+        ctx.beginPath();
         ctx.arc(shape.x, shape.y, r, 0, Math.PI * 2);
-        if (shape.fillColor) {
-          ctx.fillStyle = shape.fillColor;
+        if (fill) {
+          ctx.fillStyle = fill;
           ctx.fill();
         }
-        if (shape.strokeColor) {
-          ctx.strokeStyle = shape.strokeColor;
-          ctx.lineWidth = shape.strokeWidth || 2;
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineW;
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'ellipse': {
+        const rx = Math.max(1, shape.rx || 50);
+        const ry = Math.max(1, shape.ry || 30);
+        ctx.beginPath();
+        ctx.ellipse(shape.x, shape.y, rx, ry, 0, 0, Math.PI * 2);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineW;
           ctx.stroke();
         }
         break;
       }
       case 'line': {
-        const endX = shape.x2 || shape.x + 100;
-        const endY = shape.y2 || shape.y;
+        const endX = shape.x2 ?? shape.x + 100;
+        const endY = shape.y2 ?? shape.y;
+        ctx.beginPath();
         ctx.moveTo(shape.x, shape.y);
         ctx.lineTo(endX, endY);
-        ctx.strokeStyle = shape.strokeColor || '#000';
-        ctx.lineWidth = shape.strokeWidth || 2;
+        ctx.strokeStyle = stroke || '#1A1A1A';
+        ctx.lineWidth = lineW;
         ctx.stroke();
         break;
       }
       case 'triangle': {
-        const triWidth = shape.width || 100;
-        const triHeight = shape.height || 100;
-        ctx.moveTo(shape.x, shape.y);
-        ctx.lineTo(shape.x + triWidth / 2, shape.y - triHeight);
-        ctx.lineTo(shape.x + triWidth, shape.y);
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        const { x, y } = toTopLeft(shape);
+        // 等腰三角形，底边在下，顶点在上
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2, y);
+        ctx.lineTo(x + w, y + h);
+        ctx.lineTo(x, y + h);
         ctx.closePath();
-        if (shape.fillColor) {
-          ctx.fillStyle = shape.fillColor;
+        if (fill) {
+          ctx.fillStyle = fill;
           ctx.fill();
         }
-        if (shape.strokeColor) {
-          ctx.strokeStyle = shape.strokeColor;
-          ctx.lineWidth = shape.strokeWidth || 2;
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineW;
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'polygon': {
+        const pts = shape.points || [];
+        if (pts.length < 6) break;
+        ctx.beginPath();
+        ctx.moveTo(pts[0], pts[1]);
+        for (let i = 2; i + 1 < pts.length; i += 2) {
+          ctx.lineTo(pts[i], pts[i + 1]);
+        }
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = lineW;
           ctx.stroke();
         }
         break;
       }
       case 'text': {
-        ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
-        ctx.fillStyle = shape.fillColor || '#000';
+        const size = shape.fontSize || 24;
+        const weight = shape.fontWeight === 'bold' ? 'bold ' : '';
+        ctx.font = `${weight}${size}px PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = fill || '#1A1A1A';
         ctx.fillText(shape.text || '', shape.x, shape.y);
         break;
       }
     }
-  }, []);
 
-  // 绘制图形到 Canvas（带画笔动画和累积效果）
+    ctx.restore();
+  }, [getShapeBounds, toTopLeft]);
+
+  // 把单个 shape 按 progress (0-1) 绘制"生长中"的预览（描边渐进 + 后半段淡入填充）
+  const drawProgressiveShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape, progress: number) => {
+    const opacity = shape.opacity ?? 1;
+    const stroke = shape.strokeColor || '#1A1A1A';
+    const lineW = shape.strokeWidth || 2;
+
+    ctx.save();
+    if (opacity !== 1) ctx.globalAlpha = opacity;
+
+    switch (shape.type) {
+      case 'rectangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        const { x, y } = toTopLeft(shape);
+        const cw = w * progress;
+        const ch = h * progress;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.strokeRect(x, y, cw, ch);
+        if (shape.fillColor && progress > 0.5) {
+          ctx.globalAlpha = opacity * (progress - 0.5) * 2;
+          ctx.fillStyle = shape.fillColor;
+          ctx.fillRect(x, y, cw, ch);
+        }
+        break;
+      }
+      case 'circle': {
+        const r = Math.max(1, shape.radius || 50);
+        ctx.beginPath();
+        ctx.arc(shape.x, shape.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        if (shape.fillColor && progress > 0.5) {
+          ctx.globalAlpha = opacity * (progress - 0.5) * 2;
+          ctx.beginPath();
+          ctx.arc(shape.x, shape.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = shape.fillColor;
+          ctx.fill();
+        }
+        break;
+      }
+      case 'ellipse': {
+        const rx = Math.max(1, shape.rx || 50);
+        const ry = Math.max(1, shape.ry || 30);
+        ctx.beginPath();
+        ctx.ellipse(shape.x, shape.y, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        if (shape.fillColor && progress > 0.5) {
+          ctx.globalAlpha = opacity * (progress - 0.5) * 2;
+          ctx.beginPath();
+          ctx.ellipse(shape.x, shape.y, rx, ry, 0, 0, Math.PI * 2);
+          ctx.fillStyle = shape.fillColor;
+          ctx.fill();
+        }
+        break;
+      }
+      case 'line': {
+        const endX = shape.x2 ?? shape.x + 100;
+        const endY = shape.y2 ?? shape.y;
+        const cx = shape.x + (endX - shape.x) * progress;
+        const cy = shape.y + (endY - shape.y) * progress;
+        ctx.beginPath();
+        ctx.moveTo(shape.x, shape.y);
+        ctx.lineTo(cx, cy);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        break;
+      }
+      case 'triangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        const { x, y } = toTopLeft(shape);
+        // 沿三条边按周长进度描边
+        const seg = [w, Math.hypot(w / 2, h), h]; // 底边→斜边（近似）
+        const total = seg.reduce((a, b) => a + b, 0);
+        let remain = total * progress;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h);
+        // 左下 -> 右下（底边）
+        const d1 = Math.min(remain, seg[0]);
+        if (d1 > 0) { ctx.lineTo(x + d1, y + h); remain -= d1; }
+        else { ctx.stroke(); break; }
+        // 右下 -> 顶（右斜边）
+        const d2 = Math.min(remain, seg[1]);
+        if (d2 > 0) {
+          const t = d2 / seg[1];
+          ctx.lineTo(x + w - (w / 2) * t, y + h - h * t);
+          remain -= d2;
+        } else { ctx.stroke(); break; }
+        // 顶 -> 左下（左斜边）
+        const d3 = Math.min(remain, seg[2]);
+        if (d3 > 0) {
+          const t = d3 / seg[2];
+          ctx.lineTo(x + (w / 2) * (1 - t), y + h - h * (1 - t));
+        }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        if (shape.fillColor && progress > 0.6) {
+          ctx.globalAlpha = opacity * (progress - 0.6) * 2.5;
+          drawSingleShape(ctx, { ...shape, strokeColor: undefined });
+        }
+        break;
+      }
+      case 'polygon': {
+        const pts = shape.points || [];
+        if (pts.length < 6) break;
+        const verts: [number, number][] = [];
+        for (let i = 0; i + 1 < pts.length; i += 2) verts.push([pts[i], pts[i + 1]]);
+        // 计算总周长
+        const dist: number[] = [];
+        let total = 0;
+        for (let i = 0; i < verts.length; i++) {
+          const [ax, ay] = verts[i];
+          const [bx, by] = verts[(i + 1) % verts.length];
+          const d = Math.hypot(bx - ax, by - ay);
+          dist.push(d);
+          total += d;
+        }
+        let remain = total * progress;
+        ctx.beginPath();
+        ctx.moveTo(verts[0][0], verts[0][1]);
+        for (let i = 0; i < verts.length && remain > 0; i++) {
+          const [ax, ay] = verts[i];
+          const [bx, by] = verts[(i + 1) % verts.length];
+          const d = dist[i];
+          if (remain >= d) {
+            ctx.lineTo(bx, by);
+            remain -= d;
+          } else {
+            const t = remain / d;
+            ctx.lineTo(ax + (bx - ax) * t, ay + (by - ay) * t);
+            remain = 0;
+          }
+        }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        if (shape.fillColor && progress > 0.7) {
+          ctx.globalAlpha = opacity * (progress - 0.7) * 3.3;
+          drawSingleShape(ctx, { ...shape, strokeColor: undefined });
+        }
+        break;
+      }
+      case 'text': {
+        const size = shape.fontSize || 24;
+        const weight = shape.fontWeight === 'bold' ? 'bold ' : '';
+        ctx.font = `${weight}${size}px PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = shape.fillColor || '#1A1A1A';
+        const text = shape.text || '';
+        const charCount = Math.max(1, Math.round(text.length * progress));
+        ctx.fillText(text.substring(0, charCount), shape.x, shape.y);
+        break;
+      }
+    }
+
+    ctx.restore();
+  }, [drawSingleShape, toTopLeft]);
+
+  // 绘制图形到 Canvas（双缓冲 + 画笔动画）
+  //
+  // 核心改进：用离屏 canvas 作为「已提交图层」，每个元素动画完成后才 commit。
+  // 每个动画帧只做：离屏层整体拷贝到主画布 → 叠加当前正在生长的元素。
+  // 彻底消除旧实现用 clearRect 局部清除导致的「误伤重叠元素」问题。
   const drawShapes = useCallback(async (instructions: DrawInstruction) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 设置固定 Canvas 尺寸
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
 
-    // 绘制背景
-    if (instructions.backgroundColor) {
-      ctx.fillStyle = instructions.backgroundColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
+    // 离屏提交层（与主画布同尺寸）
+    const offscreen = document.createElement('canvas');
+    offscreen.width = CANVAS_WIDTH;
+    offscreen.height = CANVAS_HEIGHT;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
 
-    // 绘制每个图形（带画笔动画，累积效果）
-    for (let shapeIndex = 0; shapeIndex < instructions.shapes.length; shapeIndex++) {
-      const shape = instructions.shapes[shapeIndex];
-      
-      // 先绘制之前所有已完成的图形（累积显示）
-      for (let i = 0; i < shapeIndex; i++) {
-        drawSingleShape(ctx, instructions.shapes[i]);
+    // 背景
+    const bgColor = instructions.backgroundColor || '#FFFFFF';
+    offCtx.fillStyle = bgColor;
+    offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // 按 z（图层）升序排序；同 z 保持原数组顺序
+    const ordered = instructions.shapes
+      .map((s, idx) => ({ s, idx }))
+      .sort((a, b) => {
+        const za = a.s.z ?? 0;
+        const zb = b.s.z ?? 0;
+        return za - zb || a.idx - b.idx;
+      })
+      .map((x) => x.s);
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const waitFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    for (let i = 0; i < ordered.length; i++) {
+      const shape = ordered[i];
+      const bounds = getShapeBounds(shape);
+
+      // 画笔移动到元素附近
+      await moveBrush(bounds.x, bounds.y);
+
+      if (prefersReduced) {
+        // 减弱运动：直接画到离屏层并 commit
+        drawSingleShape(offCtx, shape);
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.drawImage(offscreen, 0, 0);
+        continue;
       }
 
-      switch (shape.type) {
-        case 'rectangle': {
-          const w = shape.width || 100;
-          const h = shape.height || 100;
-          await moveBrush(shape.x, shape.y);
-          
-          // 绘制矩形轮廓动画（累积式）
-          for (let i = 0; i <= 100; i += 5) {
-            // 清除当前图形区域，保留其他已完成图形
-            ctx.clearRect(shape.x - 5, shape.y - 5, w + 10, h + 10);
-            
-            // 重新绘制背景
-            if (instructions.backgroundColor) {
-              ctx.fillStyle = instructions.backgroundColor;
-              ctx.fillRect(shape.x - 5, shape.y - 5, w + 10, h + 10);
-            }
-            
-            // 重新绘制之前的图形
-            for (let j = 0; j < shapeIndex; j++) {
-              drawSingleShape(ctx, instructions.shapes[j]);
-            }
-            
-            // 绘制当前图形的进度
-            const progress = i / 100;
-            const currentW = w * progress;
-            const currentH = h * progress;
-            
-            ctx.beginPath();
-            ctx.moveTo(shape.x, shape.y);
-            ctx.lineTo(shape.x + currentW, shape.y);
-            ctx.lineTo(shape.x + currentW, shape.y + currentH);
-            ctx.lineTo(shape.x, shape.y + currentH);
-            ctx.closePath();
-            
-            if (shape.fillColor && progress > 0.5) {
-              const fillProgress = (progress - 0.5) * 2;
-              ctx.fillStyle = shape.fillColor;
-              ctx.globalAlpha = fillProgress;
-              ctx.fill();
-              ctx.globalAlpha = 1;
-            }
-            
-            ctx.strokeStyle = shape.strokeColor || '#000';
-            ctx.lineWidth = shape.strokeWidth || 2;
-            ctx.stroke();
-            
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          }
-          
-          // 最终绘制完整矩形
-          drawSingleShape(ctx, shape);
-          await moveBrush(shape.x + w, shape.y + h, 0.2);
-          break;
-        }
-
-        case 'circle': {
-          const r = shape.radius || 50;
-          await moveBrush(shape.x, shape.y - r);
-          
-          // 绘制圆形动画（累积式）
-          for (let i = 0; i <= 100; i += 5) {
-            // 清除当前图形区域
-            ctx.clearRect(shape.x - r - 5, shape.y - r - 5, r * 2 + 10, r * 2 + 10);
-            
-            // 重新绘制背景
-            if (instructions.backgroundColor) {
-              ctx.fillStyle = instructions.backgroundColor;
-              ctx.fillRect(shape.x - r - 5, shape.y - r - 5, r * 2 + 10, r * 2 + 10);
-            }
-            
-            // 重新绘制之前的图形
-            for (let j = 0; j < shapeIndex; j++) {
-              drawSingleShape(ctx, instructions.shapes[j]);
-            }
-            
-            // 绘制当前图形的进度
-            const progress = i / 100;
-            ctx.beginPath();
-            ctx.arc(shape.x, shape.y, r, 0, Math.PI * 2 * progress);
-            ctx.strokeStyle = shape.strokeColor || '#000';
-            ctx.lineWidth = shape.strokeWidth || 2;
-            ctx.stroke();
-            
-            if (shape.fillColor && progress > 0.5) {
-              const fillProgress = (progress - 0.5) * 2;
-              ctx.beginPath();
-              ctx.arc(shape.x, shape.y, r, 0, Math.PI * 2);
-              ctx.fillStyle = shape.fillColor;
-              ctx.globalAlpha = fillProgress;
-              ctx.fill();
-              ctx.globalAlpha = 1;
-            }
-            
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          }
-          
-          // 最终绘制完整圆形
-          drawSingleShape(ctx, shape);
-          await moveBrush(shape.x + r, shape.y, 0.2);
-          break;
-        }
-
-        case 'line': {
-          const endX = shape.x2 || shape.x + 100;
-          const endY = shape.y2 || shape.y;
-          const minX = Math.min(shape.x, endX);
-          const maxX = Math.max(shape.x, endX);
-          const minY = Math.min(shape.y, endY);
-          const maxY = Math.max(shape.y, endY);
-          
-          await moveBrush(shape.x, shape.y);
-          
-          // 绘制直线动画（累积式）
-          for (let i = 0; i <= 100; i += 5) {
-            // 清除当前图形区域
-            ctx.clearRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
-            
-            // 重新绘制背景
-            if (instructions.backgroundColor) {
-              ctx.fillStyle = instructions.backgroundColor;
-              ctx.fillRect(minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10);
-            }
-            
-            // 重新绘制之前的图形
-            for (let j = 0; j < shapeIndex; j++) {
-              drawSingleShape(ctx, instructions.shapes[j]);
-            }
-            
-            // 绘制当前图形的进度
-            const progress = i / 100;
-            const currentX = shape.x + (endX - shape.x) * progress;
-            const currentY = shape.y + (endY - shape.y) * progress;
-            
-            ctx.beginPath();
-            ctx.moveTo(shape.x, shape.y);
-            ctx.lineTo(currentX, currentY);
-            ctx.strokeStyle = shape.strokeColor || '#000';
-            ctx.lineWidth = shape.strokeWidth || 2;
-            ctx.stroke();
-            
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          }
-          
-          // 最终绘制完整直线
-          drawSingleShape(ctx, shape);
-          await moveBrush(endX, endY, 0.2);
-          break;
-        }
-
-        case 'triangle': {
-          const triWidth = shape.width || 100;
-          const triHeight = shape.height || 100;
-          const baseX = shape.x;
-          const baseY = shape.y;
-          
-          await moveBrush(baseX, baseY);
-          
-          // 绘制三角形动画（累积式）
-          for (let i = 0; i <= 100; i += 5) {
-            // 清除当前图形区域
-            ctx.clearRect(baseX - 5, baseY - triHeight - 5, triWidth + 10, triHeight + 10);
-            
-            // 重新绘制背景
-            if (instructions.backgroundColor) {
-              ctx.fillStyle = instructions.backgroundColor;
-              ctx.fillRect(baseX - 5, baseY - triHeight - 5, triWidth + 10, triHeight + 10);
-            }
-            
-            // 重新绘制之前的图形
-            for (let j = 0; j < shapeIndex; j++) {
-              drawSingleShape(ctx, instructions.shapes[j]);
-            }
-            
-            // 绘制当前图形的进度
-            const progress = i / 100;
-            const currentW = triWidth * progress;
-            const currentH = triHeight * progress;
-            
-            ctx.beginPath();
-            ctx.moveTo(baseX, baseY);
-            ctx.lineTo(baseX + currentW / 2, baseY - currentH);
-            ctx.lineTo(baseX + currentW, baseY);
-            ctx.closePath();
-            
-            if (shape.fillColor && progress > 0.5) {
-              const fillProgress = (progress - 0.5) * 2;
-              ctx.fillStyle = shape.fillColor;
-              ctx.globalAlpha = fillProgress;
-              ctx.fill();
-              ctx.globalAlpha = 1;
-            }
-            
-            ctx.strokeStyle = shape.strokeColor || '#000';
-            ctx.lineWidth = shape.strokeWidth || 2;
-            ctx.stroke();
-            
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          }
-          
-          // 最终绘制完整三角形
-          drawSingleShape(ctx, shape);
-          await moveBrush(baseX + triWidth, baseY, 0.2);
-          break;
-        }
-
-        case 'text': {
-          await moveBrush(shape.x, shape.y);
-          
-          // 文字逐字显示动画（累积式）
-          const text = shape.text || '';
-          for (let i = 0; i <= text.length; i++) {
-            // 清除当前文字区域
-            const textWidth = ctx.measureText(text).width;
-            ctx.clearRect(shape.x - 5, shape.y - 25, textWidth + 10, 30);
-            
-            // 重新绘制背景
-            if (instructions.backgroundColor) {
-              ctx.fillStyle = instructions.backgroundColor;
-              ctx.fillRect(shape.x - 5, shape.y - 25, textWidth + 10, 30);
-            }
-            
-            // 重新绘制之前的图形
-            for (let j = 0; j < shapeIndex; j++) {
-              drawSingleShape(ctx, instructions.shapes[j]);
-            }
-            
-            // 绘制当前文字进度
-            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
-            ctx.fillStyle = shape.fillColor || '#000';
-            ctx.fillText(text.substring(0, i), shape.x, shape.y);
-            
-            await new Promise(resolve => setTimeout(resolve, 80));
-          }
-          
-          await moveBrush(shape.x + (ctx.measureText(text).width || 0), shape.y, 0.2);
-          break;
-        }
+      // 动画：每帧从离屏层整体拷贝 + 叠加当前元素的生长进度
+      const STEPS = 24;
+      for (let step = 0; step <= STEPS; step++) {
+        const progress = step / STEPS;
+        // 主画布 = 已提交层（含背景 + 之前所有完成的元素）
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.drawImage(offscreen, 0, 0);
+        // 叠加当前正在生长的元素
+        drawProgressiveShape(ctx, shape, progress);
+        await waitFrame();
       }
+
+      // 动画结束：把当前元素 commit 到离屏层（成为永久已提交层的一部分）
+      drawSingleShape(offCtx, shape);
+      // 最终主画布也同步显示完整状态
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(offscreen, 0, 0);
+
+      await moveBrush(bounds.x + bounds.w, bounds.y + bounds.h, 0.2);
     }
 
-    // 绘制完成后隐藏画笔
+    // 完成后隐藏画笔
     setTimeout(() => {
       setBrushVisible(false);
     }, 500);
 
-    // 添加绘制完成动画
+    // 绘制完成微动效
     gsap.fromTo(
       canvas,
       { scale: 0.98, opacity: 0.9 },
       { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.4)' }
     );
-  }, [moveBrush, drawSingleShape]);
+  }, [moveBrush, drawSingleShape, drawProgressiveShape, getShapeBounds]);
 
   // 初始化Canvas
   useEffect(() => {
@@ -837,9 +957,9 @@ export default function CanvasPage() {
     startPresetAnimation();
 
     try {
-      // 尝试查找相似提示词
+      // 尝试查找相似提示词（阈值 0.9：仅几乎完全相同的指令才复用模板，秒级出图）
       const userId = user?.id || null;
-      const similarPrompt = await promptHistoryDB.findSimilar(sessionDescription, userId, 0.65);
+      const similarPrompt = await promptHistoryDB.findSimilar(sessionDescription, userId, 0.9);
       
       let instructions: DrawInstruction;
       

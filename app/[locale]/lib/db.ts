@@ -52,6 +52,7 @@ export interface PromptHistory {
   canvasParams: string; // canvas参数 JSON 字符串
   similarityScore: number; // 相似度分数（用于排序）
   usageCount: number; // 使用次数
+  isTemplate?: boolean; // 是否为可复用模板（高相似度命中后自动标记）
   createdAt: Date;
   updatedAt: Date;
 }
@@ -366,11 +367,13 @@ export const promptHistoryDB = {
   },
 
   // 查找相似提示词
-  async findSimilar(prompt: string, userId: string | null = null, threshold: number = 0.7): Promise<PromptHistory | null> {
+  // 阈值默认 0.9（几乎完全相同才命中），避免"画一只猫"与"画一只猫在树下"
+  // 这类相似但语义不同的指令被错误复用，从而错误跳过 LLM 生成。
+  async findSimilar(prompt: string, userId: string | null = null, threshold: number = 0.9): Promise<PromptHistory | null> {
     const allHistory = await db.getAll<PromptHistory>(STORES.PROMPT_HISTORY);
-    
+
     // 过滤用户相关的记录（未登录用户只匹配userId为null的记录）
-    const filteredHistory = userId 
+    const filteredHistory = userId
       ? allHistory.filter(h => h.userId === userId || h.userId === null)
       : allHistory.filter(h => h.userId === null);
 
@@ -384,17 +387,18 @@ export const promptHistoryDB = {
 
     // 找到相似度高于阈值的记录
     const matched = sortedHistory.find(h => h.similarityScore >= threshold);
-    
+
     if (matched) {
-      // 更新使用次数
+      // 更新使用次数，并标记为可复用模板（供后续相似指令秒级复用）
       const existing = await db.get<PromptHistory>(STORES.PROMPT_HISTORY, matched.id);
       if (existing) {
         existing.usageCount += 1;
         existing.similarityScore = matched.similarityScore;
+        existing.isTemplate = true;
         existing.updatedAt = new Date();
         await db.put(STORES.PROMPT_HISTORY, existing);
       }
-      
+
       return { ...matched, canvasParams: existing?.canvasParams || matched.canvasParams };
     }
 

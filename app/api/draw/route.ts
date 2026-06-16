@@ -1,10 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
 import { drawInstructionSchema } from "../../lib/draw-schema";
-import type { DrawInstruction, Shape } from "../../lib/draw-schema";
-import { buildDrawPrompt } from "./prompt-templates";
+import type { DrawInstruction } from "../../lib/draw-schema";
+import { buildContextSection, getPromptBuilders, summarizeContext, type DrawContext } from "./prompts";
 
 const MODEL_STEP_TIMEOUT_MS = 45_000;
+const SIMPLE_PROMPT_LENGTH_THRESHOLD = 24;
+const SIMPLE_SHAPE_KEYWORDS = ["圆", "圆形", "矩形", "方形", "三角形", "直线", "星星", "五角星", "写上"];
 
 function normalizeDrawError(error: unknown): Error {
   const message =
@@ -66,7 +68,7 @@ function parseJsonSafe(raw: string): unknown {
 function getModel(): LanguageModel {
   const apiBase = process.env.OPENAI_API_BASE || "https://api.deepseek.com/v1";
   const apiKey = process.env.OPENAI_API_KEY;
-  const modelName = process.env.OPENAI_API_MODEL || "deepseek-chat";
+  const modelName = process.env.OPENAI_API_MODEL || "deepseek-v4-pro";
 
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY");
@@ -76,10 +78,16 @@ function getModel(): LanguageModel {
   return openai.chat(modelName) as unknown as LanguageModel;
 }
 
-/** 多轮创作的上下文：现有画布元素 + 背景色，供增量规划时避让与衔接 */
-interface DrawContext {
-  shapes: Shape[];
-  backgroundColor?: string;
+function getModelByName(modelName: string): LanguageModel {
+  const apiBase = process.env.OPENAI_API_BASE || "https://api.deepseek.com/v1";
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
+  const openai = createOpenAI({ baseURL: apiBase, apiKey });
+  return openai.chat(modelName) as unknown as LanguageModel;
 }
 
 interface DrawRequest {
@@ -88,14 +96,45 @@ interface DrawRequest {
   appendPrompt?: string;
 }
 
-async function generateDrawInstruction(
-  userPrompt: string,
-  model: LanguageModel,
-  ctx?: DrawContext,
-): Promise<DrawInstruction> {
-  const drawPrompt = buildDrawPrompt({ userPrompt, context: ctx });
-  const raw = await generateModelText(model, drawPrompt, 0.2);
-  const parsed = parseJsonSafe(raw);
+function isSimpleTask(prompt: string, context?: DrawContext): boolean {
+  if (context?.shapes.length) {
+    return false;
+  }
+
+  const normalized = prompt.trim();
+  if (normalized.length > SIMPLE_PROMPT_LENGTH_THRESHOLD) {
+    return false;
+  }
+
+  return SIMPLE_SHAPE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+async function runAgent(model: LanguageModel, prompt: string, temperature: number): Promise<string> {
+  return generateModelText(model, prompt, temperature);
+}
+
+async function generateDrawInstruction(userPrompt: string, ctx?: DrawContext): Promise<DrawInstruction> {
+  const { buildPolishPrompt, buildCoordinatePrompt, buildDrawPrompt, buildValidatePrompt } = getPromptBuilders();
+  const appendMode = Boolean(ctx?.shapes.length);
+  const useSimpleFlow = isSimpleTask(userPrompt, ctx);
+  const polishModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-flash");
+  const coordinateModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-flash");
+  const drawModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro");
+  const validateModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro");
+
+  const contextSummary = summarizeContext(ctx);
+  const contextSection = buildContextSection(ctx);
+
+  const polishedPrompt = await runAgent(polishModel, buildPolishPrompt(userPrompt, appendMode), 0.1);
+  const layoutPlan = await runAgent(
+    coordinateModel,
+    buildCoordinatePrompt(polishedPrompt, contextSummary, appendMode),
+    0.15,
+  );
+  const rawJson = await runAgent(drawModel, buildDrawPrompt(layoutPlan, contextSection), 0.2);
+  const validatedJson = await runAgent(validateModel, buildValidatePrompt(rawJson, contextSection), 0.1);
+
+  const parsed = parseJsonSafe(validatedJson);
   return drawInstructionSchema.parse(parsed);
 }
 
@@ -117,15 +156,14 @@ export async function POST(req: Request) {
       return Response.json({ error: "prompt is required" }, { status: 400 });
     }
 
-    let model: LanguageModel;
     try {
-      model = getModel();
+      getModel();
     } catch {
       console.error("Missing OPENAI_API_KEY");
       return Response.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
     }
 
-    const instruction = await generateDrawInstruction(effectivePrompt, model, context);
+    const instruction = await generateDrawInstruction(effectivePrompt, context);
 
     return Response.json(instruction);
   } catch (error) {

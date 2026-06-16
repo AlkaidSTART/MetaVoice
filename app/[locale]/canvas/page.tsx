@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useLayoutEffect, Suspense } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import {
   Image,
@@ -55,13 +56,57 @@ import {
   pointAtArcLength,
   strokeJitteredPolyline,
 } from '../lib/path-geometry';
-import XfyunVoiceInput from '../components/XfyunVoiceInput';
-import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
 import LanguageSwitcher from '../components/LanguageSwitcher';
-import WeChatBotPanel from '../components/WeChatBotPanel';
-import ChildGuide from '../components/ChildGuide';
-import IdleGuide from '../components/IdleGuide';
+
+const XfyunVoiceInput = dynamic(() => import('../components/XfyunVoiceInput'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex min-h-[196px] items-center justify-center rounded-2xl border border-sakura/10 bg-surface/70 px-4 py-6 text-sm text-text-secondary">
+      正在准备语音输入...
+    </div>
+  ),
+});
+
+const SaveModal = dynamic(() => import('../components/SaveModal'));
+
+const WeChatBotPanel = dynamic(() => import('../components/WeChatBotPanel'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-[72px] shrink-0 rounded-3xl border border-sakura/10 bg-surface/92 shadow-lg shadow-sakura/5 backdrop-blur-sm" />
+  ),
+});
+
+const ChildGuide = dynamic(() => import('../components/ChildGuide'), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-[120px] rounded-3xl border border-sakura/10 bg-white/90 shadow-sm shadow-sakura/5" />
+  ),
+});
+
+const IdleGuide = dynamic(() => import('../components/IdleGuide'), {
+  ssr: false,
+});
+
+const presetTemplates = [
+  { icon: 'Sun', title: '日出日落', prompt: '画一个美丽的日出场景，太阳从地平线升起' },
+  { icon: 'Home', title: '建筑房屋', prompt: '画一栋可爱的小房子' },
+  { icon: 'Flower2', title: '花朵植物', prompt: '画一朵漂亮的樱花' },
+  { icon: 'Star', title: '星星月亮', prompt: '画一个满天星空的夜晚' },
+  { icon: 'Cat', title: '可爱动物', prompt: '画一只橘色的小猫' },
+  { icon: 'Palette', title: '抽象艺术', prompt: '画一些几何图形组成的图案' },
+] as const;
+
+const presetShapes = [
+  { type: 'circle', color: '#FFB7C5', size: 30 },
+  { type: 'square', color: '#B5D5F5', size: 25 },
+  { type: 'triangle', color: '#B5E8C7', size: 35 },
+  { type: 'star', color: '#FFE5A0', size: 28 },
+  { type: 'line', color: '#D4C5F5', length: 80 },
+] as const;
+
+const getPresetShapeSize = (shape: (typeof presetShapes)[number]) =>
+  'size' in shape ? shape.size : Math.max(24, Math.round(shape.length / 2));
 
 export default function CanvasPage() {
   const router = useRouter();
@@ -122,25 +167,6 @@ export default function CanvasPage() {
       throw new Error(`Invalid JSON response: ${text.slice(0, 120)}`);
     }
   }, []);
-
-  // 预设模板数据 - 使用图标代替 emoji
-  const presetTemplates = [
-    { icon: 'Sun', title: '日出日落', prompt: '画一个美丽的日出场景，太阳从地平线升起' },
-    { icon: 'Home', title: '建筑房屋', prompt: '画一栋可爱的小房子' },
-    { icon: 'Flower2', title: '花朵植物', prompt: '画一朵漂亮的樱花' },
-    { icon: 'Star', title: '星星月亮', prompt: '画一个满天星空的夜晚' },
-    { icon: 'Cat', title: '可爱动物', prompt: '画一只橘色的小猫' },
-    { icon: 'Palette', title: '抽象艺术', prompt: '画一些几何图形组成的图案' },
-  ];
-
-  // 预设 Canvas 动画图形
-  const presetShapes = [
-    { type: 'circle', color: '#FFB7C5', size: 30 },
-    { type: 'square', color: '#B5D5F5', size: 25 },
-    { type: 'triangle', color: '#B5E8C7', size: 35 },
-    { type: 'star', color: '#FFE5A0', size: 28 },
-    { type: 'line', color: '#D4C5F5', length: 80 },
-  ];
 
   const [currentPresetIndex, setCurrentPresetIndex] = useState(0);
   const presetIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -283,11 +309,11 @@ export default function CanvasPage() {
       const y = centerY + Math.sin(angle) * radius + Math.sin(time + i) * 20;
       const progress = 0.5 + 0.5 * Math.sin(time * 2 + i);
       
-      drawPresetShape(ctx, shape.type, shape.color, shape.size || 30, x, y, progress);
+      drawPresetShape(ctx, shape.type, shape.color, getPresetShapeSize(shape), x, y, progress);
     }
     
     shapeAnimationRef.current = requestAnimationFrame(runPresetShapesAnimation);
-  }, [isThinking, presetShapes, drawPresetShape]);
+  }, [isThinking, drawPresetShape]);
 
   // 启动预设模板轮播动画和 Canvas 动画
   const startPresetAnimation = useCallback(() => {
@@ -2104,13 +2130,15 @@ export default function CanvasPage() {
       </div>
 
       {/* Save Modal */}
-      <SaveModal
-        isOpen={saveModalOpen}
-        onClose={() => setSaveModalOpen(false)}
-        onSave={handleSaveConfirm}
-        title={saveTitle}
-        onTitleChange={setSaveTitle}
-      />
+      {saveModalOpen ? (
+        <SaveModal
+          isOpen={saveModalOpen}
+          onClose={() => setSaveModalOpen(false)}
+          onSave={handleSaveConfirm}
+          title={saveTitle}
+          onTitleChange={setSaveTitle}
+        />
+      ) : null}
     </div>
   );
 }

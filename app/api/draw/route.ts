@@ -67,9 +67,11 @@ function summarizeContext(ctx: DrawContext): string {
     const size =
       s.radius != null ? `r=${s.radius}` :
       s.width != null ? `${s.width}×${s.height ?? ""}` :
-      s.rx != null ? `${s.rx}×${s.ry ?? ""}` : "";
+      s.rx != null ? `${s.rx}×${s.ry ?? ""}` :
+      s.segments && s.segments.length ? `path(${s.segments.length}段${s.closed ? ",闭合" : ""})` : "";
     const color = s.fillColor || (s.gradient?.stops?.[0]?.color ?? "");
-    return `  - ${label}: ${s.type} @ ${pos} ${size} ${color}`.trim();
+    const sketch = s.sketch ? ` sketch(rough=${s.sketch.roughness})` : "";
+    return `  - ${label}: ${s.type} @ ${pos} ${size} ${color}${sketch}`.trim();
   });
   return `当前画布背景 ${ctx.backgroundColor || "#FFFFFF"}，已有元素：\n${lines.join("\n")}`;
 }
@@ -99,7 +101,7 @@ async function planScene(
 
 【画布】${CANVAS_WIDTH}×${CANVAS_HEIGHT} 像素，左上角为原点 (0,0)，x 向右、y 向下。
 
-【可用形状】rectangle（矩形）、circle（圆形）、ellipse（椭圆）、triangle（三角形）、polygon（任意多边形，如五角星）、line（直线）、text（文字）。
+【可用形状】rectangle（矩形）、circle（圆形）、ellipse（椭圆）、triangle（三角形）、polygon（任意多边形，如五角星）、line（直线）、path（贝塞尔曲线/自由弧线，用 M/L/Q/C/Z 指令段拼接，适合波浪/藤蔓/彩虹/云朵边缘/河流/微笑曲线等不适合直线拼凑的物体）、text（文字）。需要手绘/童趣/卡通感时，给元素加 sketch 风格。
 
 ${ctxSummary}
 
@@ -133,7 +135,7 @@ ${ctxSummary}
 
 【画布】${CANVAS_WIDTH}×${CANVAS_HEIGHT} 像素，左上角为原点 (0,0)，x 向右、y 向下。
 
-【可用形状】rectangle（矩形）、circle（圆形）、ellipse（椭圆）、triangle（三角形）、polygon（任意多边形，如五角星）、line（直线）、text（文字）。
+【可用形状】rectangle（矩形）、circle（圆形）、ellipse（椭圆）、triangle（三角形）、polygon（任意多边形，如五角星）、line（直线）、path（贝塞尔曲线/自由弧线，用 M/L/Q/C/Z 指令段拼接，适合波浪/藤蔓/彩虹/云朵边缘/河流/微笑曲线等不适合直线拼凑的物体）、text（文字）。需要手绘/童趣/卡通感时，给元素加 sketch 风格。
 
 【用户指令】"${userPrompt}"
 
@@ -150,6 +152,8 @@ ${ctxSummary}
 
 要求：
 - 把抽象物体拆解为几何形状组合。例如"小房子"= 矩形墙体 + 三角形屋顶 + 矩形门 + 小方形窗户；"树"= 棕色矩形树干 + 绿色 circle/ellipse 树冠；"太阳"= 黄色 circle + 若干 line 光芒；"云"= 多个白色半透明 ellipse 叠加。
+- 适合弧线的物体优先用 path（贝塞尔曲线）：例如波浪、彩虹、河流、藤蔓、云朵的弧形边缘、嘴角微笑曲线、花瓣轮廓等，不要用很多 line 直线硬拼。path 用 M 起点 → Q/C 贝塞尔画弧 → （闭合时）Z。
+- 需要手绘/童趣/卡通/涂鸦风格的元素，标注 sketch 风格（roughness 抖动幅度、seed 种子、wobble 线宽脉动）；写实几何（如精确的矩形、太阳圆盘）不要加 sketch。
 - 数量充足但不过度堆砌，保证视觉清晰。
 - 元素之间不要严重重叠错位，留出合理间距。
 - 文字标注（如标题）放在不遮挡主体的位置，字号 24-48。`;
@@ -181,7 +185,7 @@ async function generateDrawJson(
 {
   "shapes": [
     {
-      "type": "rectangle | circle | ellipse | line | triangle | polygon | text",
+      "type": "rectangle | circle | ellipse | line | triangle | polygon | path | text",
       "x": number,                // 配合 anchor 解读
       "y": number,
       "anchor": "top-left | center | bottom-right",  // 默认 top-left
@@ -194,6 +198,15 @@ async function generateDrawJson(
       "rx": number, "ry": number, // ellipse 水平/垂直半径
       "x2": number, "y2": number, // line 终点
       "points": [x1,y1,x2,y2,...], // polygon 顶点平铺数组
+      // path（贝塞尔曲线，type=path 时必填）：
+      "segments": [               // SVG 风格指令段数组；首段应为 M
+        {"cmd":"M","x":number,"y":number},          // 移动到起点
+        {"cmd":"L","x":number,"y":number},          // 直线到终点
+        {"cmd":"Q","x1":number,"y1":number,"x":number,"y":number},        // 二次贝塞尔：控制点(x1,y1)→终点(x,y)
+        {"cmd":"C","x1":number,"y1":number,"x2":number,"y2":number,"x":number,"y":number}, // 三次贝塞尔
+        {"cmd":"Z"}                                  // 闭合回起点（需配合 closed:true）
+      ],
+      "closed": boolean,          // path 是否闭合（闭合时可 fillColor 填充）；默认 false（开放曲线仅描边）
       // 文字：
       "text": string,
       "fontSize": number,         // 默认 24
@@ -203,7 +216,13 @@ async function generateDrawJson(
       "strokeColor": "#RRGGBB 或名称",
       "strokeWidth": number,      // 默认 2
       "opacity": number,          // 0-1，默认 1
-      "rotation": number          // 度，绕几何中心顺时针，默认 0
+      "rotation": number,         // 度，绕几何中心顺时针，默认 0
+      // 手绘风格（可选，任何几何形状都可加，文字不要加）：
+      "sketch": {
+        "roughness": number,      // 轮廓抖动幅度 0-2，0.3-0.8 常用，越大越抖
+        "seed": number,           // 伪随机种子（整数），同 seed 渲染可复现
+        "wobble": number          // 线宽脉动幅度 0-2，模拟笔压变化
+      }
     }
   ],
   "backgroundColor": "#RRGGBB 或名称 | null"
@@ -213,6 +232,14 @@ async function generateDrawJson(
 - top-left：(x,y) 是形状的左上角（rectangle/triangle 的左上、text 基线左端、line 起点、polygon 第一个顶点）。
 - center：(x,y) 是几何中心（circle/ellipse/polygon/rectangle 的中心、text 文本框中心）。
 - bottom-right：(x,y) 是右下角（rectangle）。
+- path 的 (x,y) 是兜底锚点（segments 各自携带绝对坐标，x,y 仅在首段非 M 或缺省坐标时兜底）。
+
+【path 使用要点】
+- path 用于弧线/自由曲线：波浪、彩虹、藤蔓、河流、微笑曲线、花瓣轮廓等。不要用 line 直线硬拼弧形物体。
+- 用 Q（二次贝塞尔）画单弧最简单：M 起点 → Q 控制点 终点。复杂曲线用 C 或多段 Q 拼接。
+- 开放曲线（如波浪线、藤蔓）只设 strokeColor 描边，不要 fillColor，closed=false。
+- 闭合曲线（如花瓣、云朵弧形边缘、心形）设 closed=true 并给 fillColor 填充，末段可加 {"cmd":"Z"}。
+- sketch 让形状有手绘抖动感：童趣/卡通/涂鸦风格的元素加 sketch（roughness 0.4-0.8）；精确几何（太阳圆盘、矩形墙）不要加。
 
 【关键规则】
 1. 坐标必须在 [0,${CANVAS_WIDTH}] × [0,${CANVAS_HEIGHT}] 内，元素整体不得超出画布。
@@ -249,6 +276,42 @@ async function generateDrawJson(
   "shapes":[
     {"type":"polygon","x":150,"y":150,"anchor":"center","z":1,"points":[150,90,165,135,210,135,175,162,188,205,150,180,112,205,125,162,90,135,135,135],"fillColor":"#FFEB3B"},
     {"type":"text","x":720,"y":650,"anchor":"center","z":1,"text":"夜空","fontSize":40,"fontWeight":"bold","fillColor":"#FFFFFF"}
+  ]
+}
+
+【参考示例 4：path 弧线 + sketch 手绘感（一道起伏的波浪线，带手绘抖动）】
+{
+  "backgroundColor":"#E3F1FF",
+  "shapes":[
+    {
+      "type":"path","x":80,"y":360,"anchor":"top-left","z":1,
+      "segments":[
+        {"cmd":"M","x":80,"y":360},
+        {"cmd":"Q","x1":240,"y1":240,"x":400,"y":360},
+        {"cmd":"Q","x1":560,"y1":480,"x":720,"y":360},
+        {"cmd":"Q","x1":840,"y1":280,"x":900,"y":360}
+      ],
+      "closed":false,
+      "strokeColor":"#1A1A1A","strokeWidth":4,
+      "sketch":{"roughness":0.6,"seed":7,"wobble":0.4}
+    }
+  ]
+}
+
+【参考示例 5：闭合 path 花瓣（用贝塞尔画出弧形花瓣轮廓并填充）】
+{
+  "backgroundColor":"#FFFFFF",
+  "shapes":[
+    {"type":"path","x":480,"y":360,"anchor":"center","z":1,
+      "segments":[
+        {"cmd":"M","x":480,"y":260},
+        {"cmd":"C","x1":560,"y1":300,"x2":560,"y2":420,"x":480,"y":460},
+        {"cmd":"C","x1":400,"y1":420,"x2":400,"y2":300,"x":480,"y":260},
+        {"cmd":"Z"}
+      ],
+      "closed":true,
+      "fillColor":"#FFB7C5","strokeColor":"#E5739B","strokeWidth":3
+    }
   ]
 }
 

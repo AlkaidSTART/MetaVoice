@@ -46,12 +46,22 @@ import {
   type CanvasState,
 } from '../lib/canvas-state';
 import { parseCanvasEditCommand, resolveShapeIdsByHint } from '../lib/canvas-commands';
+import {
+  applySketchJitter,
+  flattenPathSegments,
+  flattenShapeOutline,
+  getPathBounds,
+  pathArcLength,
+  pointAtArcLength,
+  strokeJitteredPolyline,
+} from '../lib/path-geometry';
 import XfyunVoiceInput from '../components/XfyunVoiceInput';
 import SaveModal from '../components/SaveModal';
 import Toast from '../components/Toast';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import WeChatBotPanel from '../components/WeChatBotPanel';
 import ChildGuide from '../components/ChildGuide';
+import IdleGuide from '../components/IdleGuide';
 
 export default function CanvasPage() {
   const router = useRouter();
@@ -76,7 +86,12 @@ export default function CanvasPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [user, setUser] = useState<UserType | null>(null);
   const [brushVisible, setBrushVisible] = useState(false);
-  const [brushPosition, setBrushPosition] = useState({ x: 0, y: 0 });
+  // 画笔位置：用 ref 持有（GSAP 直接改 ref.current），由 gsap.ticker 每帧
+  // 同步到画笔 DOM 的 style，绕开 React 重渲染。旧实现把 state 对象直接
+  // 交给 gsap.set 原地修改、却不触发 setState，画笔跟随依赖无关重渲染才偶尔刷新，
+  // 时序不稳。改用 ref + ticker 后画笔逐帧准确跟随曲线轨迹。
+  const brushRef = useRef<HTMLDivElement>(null);
+  const brushPosition = useRef({ x: 0, y: 0 });
   const [isThinking, setIsThinking] = useState(false);
   const [canvasState, setCanvasState] = useState<CanvasState>(emptyState());
   const [history, setHistory] = useState<AddBatchHistoryEntry[]>([]);
@@ -305,20 +320,6 @@ export default function CanvasPage() {
     }
   }, [addToast, tCanvas]);
 
-  // 移动画笔到指定位置
-  const moveBrush = useCallback((x: number, y: number, duration: number = 0.3) => {
-    return new Promise<void>((resolve) => {
-      setBrushVisible(true);
-      gsap.to(brushPosition, {
-        x,
-        y,
-        duration,
-        ease: 'power2.out',
-        onComplete: resolve,
-      });
-    });
-  }, [brushPosition]);
-
   // 把 anchor=center/bottom-right 的语义坐标转换为"左上角"绝对坐标
   // 这样渲染层统一以左上角为锚点，避免歧义
   const toTopLeft = useCallback((shape: Shape) => {
@@ -387,6 +388,10 @@ export default function CanvasPage() {
         }
         if (!isFinite(minX)) return { x: shape.x, y: shape.y, w: 100, h: 100, cx: shape.x, cy: shape.y };
         return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+      }
+      case 'path': {
+        // path：遍历所有指令段的端点与控制点取 min/max
+        return getPathBounds(shape);
       }
       case 'text': {
         // 粗略估算
@@ -572,6 +577,42 @@ export default function CanvasPage() {
         ctx.stroke();
       }
     };
+
+    // sketch 手绘风格：对任意几何形状（circle/rect/path/...）叠加种子化抖动 +
+    // 线宽脉动描边，让画面「像人类自然画图」而非笔直线条拼凑。
+    // 文字不做 sketch（避免不可读）；sketch.roughness=0 等价关闭。
+    if (shape.sketch && shape.type !== 'text') {
+      const { points: outline, closed } = flattenShapeOutline(shape, toTopLeft);
+      if (outline.length >= 2) {
+        const { points: jittered, widthScale } = applySketchJitter(outline, shape.sketch);
+        // 闭合形状先按抖动轮廓填充（用平滑路径填充，保证填充区域干净）
+        if (fill && closed) {
+          ctx.fillStyle = fill;
+          ctx.beginPath();
+          ctx.moveTo(jittered[0].x, jittered[0].y);
+          for (let i = 1; i < jittered.length; i++) ctx.lineTo(jittered[i].x, jittered[i].y);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // 清除阴影后用抖动折线描边（带线宽脉动）
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          strokeJitteredPolyline(ctx, jittered, widthScale, lineW, closed);
+        } else if (!closed) {
+          // 开放曲线且无显式描边色：用 fillColor 兜底描边，保证曲线可见
+          ctx.strokeStyle = typeof fill === 'string' ? fill : '#1A1A1A';
+          strokeJitteredPolyline(ctx, jittered, widthScale, lineW, closed);
+        }
+        // sketch 分支不走 fillThenStroke，直接收尾（匹配顶部 ctx.save）
+        ctx.restore();
+        return;
+      }
+    }
+
     fillThenStroke();
 
     // 高光斑：球体表面反光（光源方向的亮斑）
@@ -595,7 +636,7 @@ export default function CanvasPage() {
     }
 
     ctx.restore();
-  }, [getShapeBounds, resolveFillStyle]);
+  }, [getShapeBounds, resolveFillStyle, toTopLeft]);
 
   // 构建 shape 的路径（不填充、不描边），供 fill/stroke/clip 复用
   // 注意：line 类型无闭合路径，text 用 fillText 直接绘制（此处仅处理几何形状）
@@ -650,6 +691,49 @@ export default function CanvasPage() {
           ctx.lineTo(pts[i], pts[i + 1]);
         }
         ctx.closePath();
+        break;
+      }
+      case 'path': {
+        const segs = shape.segments || [];
+        if (segs.length === 0) return;
+        ctx.beginPath();
+        let started = false;
+        let firstPt: { x: number; y: number } | null = null;
+        for (const seg of segs) {
+          switch (seg.cmd) {
+            case 'M': {
+              const mx = seg.x ?? shape.x;
+              const my = seg.y ?? shape.y;
+              ctx.moveTo(mx, my);
+              started = true;
+              if (!firstPt) firstPt = { x: mx, y: my };
+              break;
+            }
+            case 'L': {
+              if (!started) { ctx.moveTo(shape.x, shape.y); started = true; }
+              ctx.lineTo(seg.x ?? shape.x, seg.y ?? shape.y);
+              break;
+            }
+            case 'Q': {
+              if (!started) { ctx.moveTo(shape.x, shape.y); started = true; }
+              ctx.quadraticCurveTo(seg.x1 ?? shape.x, seg.y1 ?? shape.y, seg.x ?? shape.x, seg.y ?? shape.y);
+              break;
+            }
+            case 'C': {
+              if (!started) { ctx.moveTo(shape.x, shape.y); started = true; }
+              ctx.bezierCurveTo(
+                seg.x1 ?? shape.x, seg.y1 ?? shape.y,
+                seg.x2 ?? shape.x, seg.y2 ?? shape.y,
+                seg.x ?? shape.x, seg.y ?? shape.y,
+              );
+              break;
+            }
+            case 'Z': {
+              if (shape.closed) ctx.closePath();
+              break;
+            }
+          }
+        }
         break;
       }
       // text 无几何路径，由调用方特殊处理
@@ -740,7 +824,7 @@ export default function CanvasPage() {
         if (pts.length < 6) return { x: shape.x, y: shape.y };
         const verts: [number, number][] = [];
         for (let i = 0; i + 1 < pts.length; i += 2) verts.push([pts[i], pts[i + 1]]);
-        
+
         const dist: number[] = [];
         let total = 0;
         for (let i = 0; i < verts.length; i++) {
@@ -750,7 +834,9 @@ export default function CanvasPage() {
           dist.push(d);
           total += d;
         }
-        
+        // 防御退化 polygon（周长为 0）导致后续 remain/d 除零
+        if (total <= 0) return { x: verts[0][0], y: verts[0][1] };
+
         let remain = total * progress;
         for (let i = 0; i < verts.length && remain > 0; i++) {
           const [ax, ay] = verts[i];
@@ -759,11 +845,21 @@ export default function CanvasPage() {
           if (remain >= d) {
             remain -= d;
           } else {
-            const t = remain / d;
+            const t = d > 0 ? remain / d : 0;
             return { x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
           }
         }
         return { x: verts[0][0], y: verts[0][1] };
+      }
+      case 'path': {
+        // path：沿曲线弧长定位画笔，确保画笔沿贝塞尔轨迹移动（而非直线）
+        const segs = shape.segments || [];
+        if (segs.length === 0) return { x: shape.x, y: shape.y };
+        const flat = flattenPathSegments(segs, shape.closed ?? false);
+        if (flat.length === 0) return { x: shape.x, y: shape.y };
+        const total = pathArcLength(flat);
+        if (total <= 0) return { x: flat[0].x, y: flat[0].y };
+        return pointAtArcLength(flat, total * progress);
       }
       case 'text': {
         // 文字：从左到右移动
@@ -922,6 +1018,40 @@ export default function CanvasPage() {
         }
         break;
       }
+      case 'path': {
+        const segs = shape.segments || [];
+        if (segs.length === 0) break;
+        // path 按弧长进度截断绘制：离散化整个 path → 按进度取前 N 个点描边
+        const flat = flattenPathSegments(segs, shape.closed ?? false);
+        if (flat.length < 2) break;
+        const total = pathArcLength(flat);
+        if (total <= 0) break;
+        const targetLen = total * progress;
+        // 截断到目标弧长（含最后一个插值点）
+        let remain = targetLen;
+        ctx.beginPath();
+        ctx.moveTo(flat[0].x, flat[0].y);
+        for (let i = 1; i < flat.length; i++) {
+          const segLen = Math.hypot(flat[i].x - flat[i - 1].x, flat[i].y - flat[i - 1].y);
+          if (remain >= segLen) {
+            ctx.lineTo(flat[i].x, flat[i].y);
+            remain -= segLen;
+          } else {
+            const t = segLen > 0 ? remain / segLen : 0;
+            ctx.lineTo(flat[i - 1].x + (flat[i].x - flat[i - 1].x) * t, flat[i - 1].y + (flat[i].y - flat[i - 1].y) * t);
+            break;
+          }
+        }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineW;
+        ctx.stroke();
+        // 闭合 path 在接近完成时淡入填充
+        if (shape.closed && shape.fillColor && progress > 0.7) {
+          ctx.globalAlpha = opacity * (progress - 0.7) * 3.3;
+          drawSingleShape(ctx, { ...shape, strokeColor: undefined });
+        }
+        break;
+      }
       case 'text': {
         const size = shape.fontSize || 24;
         const weight = shape.fontWeight === 'bold' ? 'bold ' : '';
@@ -1048,7 +1178,7 @@ export default function CanvasPage() {
       setBrushVisible(true);
       // 画笔移动到元素起点
       const startPos = getBrushPositionAtProgress(shape, 0);
-      gsap.set(brushPosition, { x: startPos.x, y: startPos.y });
+      gsap.set(brushPosition.current, { x: startPos.x, y: startPos.y });
 
       if (prefersReduced) {
         // 减弱运动：直接画到离屏层并 commit
@@ -1070,7 +1200,7 @@ export default function CanvasPage() {
         
         // 实时更新画笔位置跟随绘制进度
         const brushPos = getBrushPositionAtProgress(shape, progress);
-        gsap.set(brushPosition, { x: brushPos.x, y: brushPos.y });
+        gsap.set(brushPosition.current, { x: brushPos.x, y: brushPos.y });
         
         await waitFrame();
       }
@@ -1083,7 +1213,7 @@ export default function CanvasPage() {
 
       // 画笔移动到元素终点
       const endPos = getBrushPositionAtProgress(shape, 1);
-      gsap.to(brushPosition, {
+      gsap.to(brushPosition.current, {
         x: endPos.x,
         y: endPos.y,
         duration: 0.2,
@@ -1165,7 +1295,7 @@ export default function CanvasPage() {
       setBrushVisible(true);
       // 画笔移动到元素起点
       const startPos = getBrushPositionAtProgress(shape, 0);
-      gsap.set(brushPosition, { x: startPos.x, y: startPos.y });
+      gsap.set(brushPosition.current, { x: startPos.x, y: startPos.y });
 
       if (prefersReduced) {
         drawSingleShape(offCtx, shape);
@@ -1183,7 +1313,7 @@ export default function CanvasPage() {
         
         // 实时更新画笔位置跟随绘制进度
         const brushPos = getBrushPositionAtProgress(shape, progress);
-        gsap.set(brushPosition, { x: brushPos.x, y: brushPos.y });
+        gsap.set(brushPosition.current, { x: brushPos.x, y: brushPos.y });
         
         await waitFrame();
       }
@@ -1194,7 +1324,7 @@ export default function CanvasPage() {
       
       // 画笔移动到元素终点
       const endPos = getBrushPositionAtProgress(shape, 1);
-      gsap.to(brushPosition, {
+      gsap.to(brushPosition.current, {
         x: endPos.x,
         y: endPos.y,
         duration: 0.2,
@@ -1240,6 +1370,28 @@ export default function CanvasPage() {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }, []);
+
+  // 画笔位置同步：gsap.ticker 每帧把 brushPosition ref 写入画笔 DOM 的 transform，
+  // 绕开 React（位置不进 state）。卸载时移除 ticker，避免泄漏。
+  useEffect(() => {
+    const syncBrush = () => {
+      const el = brushRef.current;
+      if (!el) return;
+      const { x, y } = brushPosition.current;
+      el.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
+    };
+    gsap.ticker.add(syncBrush);
+    return () => {
+      gsap.ticker.remove(syncBrush);
+    };
+  }, []);
+
+  // 卸载清理：预设动画的 interval / rAF 若未停止会泄漏并操作已卸载 canvas。
+  useEffect(() => {
+    return () => {
+      stopPresetAnimation();
+    };
+  }, [stopPresetAnimation]);
 
   // 保存到图库（带命名）
   const handleSaveClick = useCallback(() => {
@@ -1599,7 +1751,7 @@ export default function CanvasPage() {
       {/* Header */}
       <header
         ref={headerRef}
-        className="h-14 bg-surface/80 backdrop-blur-sm border-b border-sakura/10 flex items-center justify-between px-6"
+        className="h-14 bg-surface/80 backdrop-blur-sm border-b border-sakura/10 flex items-center justify-between px-6 z-[200]"
       >
         <div className="flex items-center gap-3">
           <LanguageSwitcher />
@@ -1729,12 +1881,17 @@ export default function CanvasPage() {
               </div>
             )}
 
-            {/* 画笔指针 */}
+            {/* 静息状态引导覆盖层 - 画布空白时显示 */}
+            <IdleGuide visible={!isThinking && canvasState.shapes.length === 0} />
+
+            {/* 画笔指针：位置由 brushPosition ref + gsap.ticker 每帧写入 transform，
+                避免把位置放进 React state 导致的跟随抖动/滞后。 */}
             <div
+              ref={brushRef}
               className={`absolute pointer-events-none transition-opacity duration-300 ${brushVisible ? 'opacity-100' : 'opacity-0'}`}
               style={{
-                left: brushPosition.x,
-                top: brushPosition.y,
+                left: 0,
+                top: 0,
                 transform: 'translate(-50%, -50%)',
                 zIndex: 100,
               }}

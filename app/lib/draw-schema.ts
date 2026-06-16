@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Canvas 绘图指令 Schema（v3 · 数据驱动光影）
+ * Canvas 绘图指令 Schema（v4 · 贝塞尔弧线 + 手绘风格）
  *
  * 坐标系：960×720，左上角为原点 (0,0)，x 向右、y 向下。
  *
@@ -11,6 +11,12 @@ import { z } from "zod";
  * - glow:      发光光晕，用于太阳/灯泡/萤火虫等光源体
  * - highlight: 球体表面高光斑，模拟反光
  * - vignette:  顶层全局暗角，增加画面聚焦感
+ *
+ * v4 新增（用于「像人类自然画图」的弧线与手绘感）：
+ * - path:    新形状类型，用 SVG 风格指令段（M/L/Q/C/Z）描述贝塞尔曲线与折线，
+ *            适合波浪/藤蔓/彩虹/云朵边缘/河流/微笑曲线等不适合直线拼凑的物体。
+ * - sketch:  任意形状可叠加的手绘抖动风格（基于确定性种子伪随机，
+ *            渲染/导出像素可复现）。roughness 控制抖动幅度，wobble 控制线宽脉动。
  */
 
 const anchorSchema = z
@@ -64,6 +70,43 @@ const highlightSchema = z.object({
   opacity: z.number().min(0).max(1).describe("不透明度 0-1，建议 0.4-0.8"),
 });
 
+// path 指令段（SVG 子集）：M 起点移动、L 直线、Q 二次贝塞尔、C 三次贝塞尔、Z 闭合。
+// 每段只填该 cmd 需要的坐标，其余忽略：
+//   M/L/Z: x?,y? (Z 无坐标，自动回到首个 M)
+//   Q: x1,y1 控制点 + x,y 终点
+//   C: x1,y1 + x2,y2 控制点 + x,y 终点
+const segmentSchema = z.object({
+  cmd: z.enum(["M", "L", "Q", "C", "Z"]).describe("M 移动/L 直线/Q 二次贝塞尔/C 三次贝塞尔/Z 闭合"),
+  x: z.number().optional().describe("终点 X（M/L/Q/C 需要）"),
+  y: z.number().optional().describe("终点 Y（M/L/Q/C 需要）"),
+  x1: z.number().optional().describe("控制点1 X（Q/C 需要）"),
+  y1: z.number().optional().describe("控制点1 Y（Q/C 需要）"),
+  x2: z.number().optional().describe("控制点2 X（仅 C）"),
+  y2: z.number().optional().describe("控制点2 Y（仅 C）"),
+});
+
+// 手绘抖动风格：基于确定性种子（mulberry32）的伪随机抖动 + 线宽脉动。
+// 同一 seed 每次渲染抖动一致，导出 PNG 像素可复现，避免引入随机性 bug。
+const sketchSchema = z.object({
+  roughness: z
+    .number()
+    .min(0)
+    .max(2)
+    .default(0.5)
+    .describe("轮廓抖动幅度 0-2，0=无抖动，0.3-0.8 常用（童趣/卡通），>1 较夸张"),
+  seed: z
+    .number()
+    .int()
+    .default(1)
+    .describe("伪随机种子（整数），同 seed 渲染可复现；不同 seed 抖动形态不同"),
+  wobble: z
+    .number()
+    .min(0)
+    .max(2)
+    .default(0.3)
+    .describe("线宽脉动幅度 0-2，0=恒定线宽，模拟手写笔压变化"),
+});
+
 export const shapeSchema = z.object({
   type: z.enum([
     "rectangle",
@@ -72,6 +115,7 @@ export const shapeSchema = z.object({
     "line",
     "triangle",
     "polygon",
+    "path",
     "text",
   ]),
   // 元素稳定标识：多轮创作中用于寻址（移动/改色/删除）与撤销栈定位。
@@ -95,6 +139,15 @@ export const shapeSchema = z.object({
     .array(z.number())
     .optional()
     .describe("polygon 顶点坐标，平铺为 [x1,y1,x2,y2,...]，至少 6 个数（3 个顶点）"),
+  // path 指令段（SVG 风格 M/L/Q/C/Z），用于贝塞尔曲线/自由弧线
+  segments: z
+    .array(segmentSchema)
+    .optional()
+    .describe("path 的指令段数组（仅 type=path）。首段应为 M；可含 Q/C 贝塞尔绘制弧线；Z 闭合"),
+  closed: z
+    .boolean()
+    .optional()
+    .describe("path 是否闭合（闭合时可填充 fillColor，自动 Z）。默认 false（开放曲线，仅描边）"),
 
   // 文本
   text: z.string().optional().describe("text 类型的文字内容"),
@@ -124,6 +177,9 @@ export const shapeSchema = z.object({
   shadow: shadowSchema.optional().describe("投影阴影，模拟立体感与地面投影"),
   glow: glowSchema.optional().describe("发光光晕，用于太阳/灯泡等光源体"),
   highlight: highlightSchema.optional().describe("球体表面高光斑，模拟反光"),
+  sketch: sketchSchema
+    .optional()
+    .describe("手绘抖动风格：给任意形状叠加种子化抖动+线宽脉动，童趣/卡通感"),
 
   // 空间语义（帮助 LLM 稳定输出，渲染层据此计算绝对坐标）
   anchor: anchorSchema,
@@ -151,3 +207,5 @@ export const drawInstructionSchema = z.object({
 
 export type Shape = z.infer<typeof shapeSchema>;
 export type DrawInstruction = z.infer<typeof drawInstructionSchema>;
+export type Segment = z.infer<typeof segmentSchema>;
+export type SketchStyle = z.infer<typeof sketchSchema>;

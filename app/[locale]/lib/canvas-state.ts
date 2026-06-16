@@ -27,15 +27,22 @@ function clampColorChannel(value: number) {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
+/**
+ * 把 HEX 颜色（#RRGGBB 或 #RRGGBBAA）的 RGB 通道送入 mapper 变换，
+ * 保留原有 alpha 通道。rgba()/名称等非 HEX 颜色原样返回（不变换）。
+ */
 function mapHexColor(color: string, mapper: (r: number, g: number, b: number) => [number, number, number]) {
-  const match = color.match(/^#([0-9a-fA-F]{6})$/);
+  const match = color.match(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/);
   if (!match) return color;
   const hex = match[1];
+  const alpha = match[2]; // 可选 alpha 通道
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
   const b = parseInt(hex.slice(4, 6), 16);
   const [nr, ng, nb] = mapper(r, g, b);
-  return `#${clampColorChannel(nr).toString(16).padStart(2, "0")}${clampColorChannel(ng).toString(16).padStart(2, "0")}${clampColorChannel(nb).toString(16).padStart(2, "0")}`.toUpperCase();
+  const rgb =
+    `#${clampColorChannel(nr).toString(16).padStart(2, "0")}${clampColorChannel(ng).toString(16).padStart(2, "0")}${clampColorChannel(nb).toString(16).padStart(2, "0")}`.toUpperCase();
+  return alpha ? rgb + alpha.toUpperCase() : rgb;
 }
 
 /**
@@ -177,6 +184,19 @@ export function moveShapesByIds(state: CanvasState, ids: string[], dx: number, d
       if (shape.y2 != null) next.y2 = shape.y2 + dy;
       if (shape.points) {
         next.points = shape.points.map((value, index) => value + (index % 2 === 0 ? dx : dy));
+      }
+      // path 的 segments 控制点也需跟随平移，否则移动 path 会变形
+      if (shape.segments) {
+        next.segments = shape.segments.map((seg) => {
+          const moved = { ...seg };
+          if (seg.x != null) moved.x = seg.x + dx;
+          if (seg.y != null) moved.y = seg.y + dy;
+          if (seg.x1 != null) moved.x1 = seg.x1 + dx;
+          if (seg.y1 != null) moved.y1 = seg.y1 + dy;
+          if (seg.x2 != null) moved.x2 = seg.x2 + dx;
+          if (seg.y2 != null) moved.y2 = seg.y2 + dy;
+          return moved;
+        });
       }
 
       return next;

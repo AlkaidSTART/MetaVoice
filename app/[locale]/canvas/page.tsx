@@ -1789,7 +1789,7 @@ export default function CanvasPage() {
   return (
       <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-bg via-sakura-light/5 to-macaron-blue-light/5">
       {/* Toast 通知区域 */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      <div className="fixed top-4 right-4 z-[300] space-y-2">
         {toasts.map((toast) => (
           <Toast
             key={toast.id}

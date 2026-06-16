@@ -185,14 +185,18 @@ export default function CanvasPage() {
     }
   }, [searchParams]);
 
-  // 加载用户信息
+  // 加载用户信息并验证登录状态
   useEffect(() => {
     const loadUser = async () => {
       const currentUser = await authDB.getCurrentUser();
+      if (!currentUser) {
+        router.push('/login');
+        return;
+      }
       setUser(currentUser);
     };
     loadUser();
-  }, []);
+  }, [router]);
 
   // 用户和编辑ID都就绪后，加载作品
   useEffect(() => {

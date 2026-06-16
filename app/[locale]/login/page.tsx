@@ -171,19 +171,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleGuestLogin = async () => {
-    try {
-      await authDB.register(
-        `guest_${Date.now()}@voicecanvas.temp`,
-        "guest",
-        "访客用户"
-      );
-      router.push("/canvas");
-    } catch (err) {
-      setError("访客登录失败，请重试");
-    }
-  };
-
   // 输入框聚焦动画
   const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     gsap.to(e.target, {
@@ -383,33 +370,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* 分隔线 */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-sakura/20" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="px-4 bg-white/80 text-text-secondary text-sm flex items-center gap-2">
-                <span className="w-2 h-2 bg-sakura rounded-full" />
-                或者
-                <span className="w-2 h-2 bg-sakura rounded-full" />
-              </span>
-            </div>
-          </div>
-
-          {/* 访客登录 */}
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="w-full py-3.5 px-6 rounded-xl font-semibold border-2 border-sakura/30 text-text-primary hover:border-sakura hover:bg-sakura-light/20 hover:text-sakura transition-all flex items-center justify-center gap-2"
-          >
-            <Mic className="w-5 h-5" />
-            作为访客体验
-          </button>
-
-          <p className="mt-4 text-center text-sm text-text-secondary">
-            访客模式下作品不会保存到云端
-          </p>
+          
         </div>
 
         {/* 底部信息 */}

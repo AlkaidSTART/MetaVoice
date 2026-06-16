@@ -7,7 +7,7 @@ export default function DefaultPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push('/canvas');
+    router.push('/login');
   }, [router]);
 
   return null;

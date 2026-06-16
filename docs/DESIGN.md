@@ -1,0 +1,592 @@
+# VoiceCanvas · 项目设计文档
+
+> **项目名称**：VoiceCanvas（语音画板）  
+> **版本**：v1.0 MVP  
+> **日期**：2026-06  
+> **项目定位**：面向肢体障碍人士和儿童的纯语音驱动绘图工具
+
+---
+
+## 1. 项目概述
+
+### 1.1 产品定位
+
+VoiceCanvas 是一款创新的语音驱动绘图工具，核心目标是让无法使用鼠标和键盘的用户（肢体障碍人士、儿童）能够通过语音指令完成图形创作。
+
+**核心价值**：
+- 纯语音操作，无需任何手动交互
+- 智能意图理解，自然语言转绘图指令
+- 双模绘图引擎（Canvas 几何图形 + AI 场景生图）
+- 无障碍优先设计，符合 WCAG 2.1 AA 标准
+
+### 1.2 目标用户
+
+| 用户群体 | 特征 | 核心需求 |
+|---------|------|---------|
+| 肢体障碍成年人 | 手部运动障碍 | 无法使用鼠标/触控，需要语音替代 |
+| 3-10 岁儿童 | 精细动作不稳定 | 简单直观的交互方式 |
+| 特殊教育学生 | 语言/认知发育不均衡 | 高容错、强反馈的交互 |
+| 创意探索者 | 快速可视化想法 | 语音比手绘更高效 |
+
+---
+
+## 2. 系统架构设计
+
+### 2.1 整体架构
+
+系统采用四层架构设计：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     第一层：用户界面层                            │
+│                                                                   │
+│  组件：                                                          │
+│  ├── MicButton（麦克风按钮）- 语音录制入口                        │
+│  ├── TranscriptBar（字幕条）- 实时识别结果展示                    │
+│  ├── CanvasBoard（画布）- 图形渲染区域                            │
+│  ├── IntentModal（意图弹框）- 低置信度确认                        │
+│  └── Toast（通知）- 操作反馈                                      │
+│                                                                   │
+│  技术栈：React 19 + Tailwind CSS v4 + GSAP 3.x                   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     第二层：语音处理层                            │
+│                                                                   │
+│  流程：                                                          │
+│  1. MediaRecorder API 录制音频                                   │
+│  2. WebSocket 连接讯飞语音听写服务                                │
+│  3. 实时返回转录文本                                              │
+│  4. Web Speech API 作为兜底方案                                  │
+│                                                                   │
+│  输出：transcript（语音转录文本）                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     第三层：意图理解层                            │
+│                                                                   │
+│  解析器：本地规则 NLP 解析器                                      │
+│                                                                   │
+│  功能：                                                          │
+│  ├── 形状识别：圆形/矩形/三角形/直线/五角星                       │
+│  ├── 颜色解析：中文颜色名 → HEX                                  │
+│  ├── 位置解析：语义锚点 → 坐标计算                               │
+│  ├── 尺寸解析：大/中/小 → 像素值                                  │
+│  ├── 控制指令：撤销/重做/清空/保存/导出                           │
+│  └── 文字指令："写上'xxx'" 提取                                   │
+│                                                                   │
+│  输出：DrawInstruction（结构化绘图指令）                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     第四层：绘图引擎层                            │
+│                                                                   │
+│  核心：HTML5 Canvas API + GSAP 动画                              │
+│                                                                   │
+│  功能：                                                          │
+│  ├── 图形绘制：矩形/圆形/三角形/直线/文字                         │
+│  ├── 绘制动画：画笔移动、渐进填充                                 │
+│  ├── 操作栈：撤销/重做历史管理                                    │
+│  ├── 导出功能：Canvas → PNG 下载                                  │
+│  └── 保存功能：Canvas 数据 → localStorage                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     第五层：数据持久层                            │
+│                                                                   │
+│  MVP 实现：localStorage                                           │
+│                                                                   │
+│  存储：                                                          │
+│  ├── 用户信息：currentUser                                       │
+│  ├── 作品历史：artworks[]                                        │
+│  └── 画布状态：canvasData                                        │
+│                                                                   │
+│  未来规划：Supabase PostgreSQL + Prisma ORM                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 数据流设计
+
+```
+用户按下麦克风
+      │
+      ▼
+MediaRecorder.start()
+      │ (录音中，实时返回中间结果)
+      ▼
+WebSocket → 讯飞语音听写 API
+      │
+      ▼
+transcript（实时字幕）
+      │ (用户松开麦克风)
+      ▼
+本地 NLP 解析器
+      │
+      ▼
+DrawInstruction
+      │
+      ├── confidence >= 0.85 ──→ 直接执行绘图
+      │
+      └── confidence < 0.85 ──→ 显示 IntentModal 确认
+                              │
+                              ▼
+                          用户确认后执行
+      │
+      ▼
+Canvas 绘制 + GSAP 动画
+      │
+      ▼
+更新操作栈（支持撤销/重做）
+      │
+      ▼
+localStorage 持久化
+```
+
+---
+
+## 3. 核心模块设计
+
+### 3.1 语音识别模块
+
+#### 3.1.1 讯飞语音听写集成
+
+```typescript
+// WebSocket 连接流程
+const connectXfyun = () => {
+  // 1. 生成鉴权签名
+  const signature = generateXfyunSignature(appId, apiKey, apiSecret);
+  
+  // 2. 建立 WebSocket 连接
+  const ws = new WebSocket(`wss://iat-api.xfyun.cn/v2/iat?${signature}`);
+  
+  // 3. 发送音频帧
+  ws.onopen = () => {
+    // 发送开始帧
+    ws.send(JSON.stringify({
+      common: { app_id: appId },
+      business: { 
+        language: 'zh_cn',
+        domain: 'iat',
+        accent: 'mandarin',
+        vad_eos: 2000,
+        dwa: 'wpgs' // 动态修正
+      },
+      data: { status: 0, format: 'audio/speex', encoding: 'raw' }
+    }));
+    
+    // 发送音频数据帧
+    sendAudioFrames(ws, audioBlob);
+  };
+  
+  // 4. 接收识别结果
+  ws.onmessage = (event) => {
+    const result = JSON.parse(event.data);
+    if (result.code === 0) {
+      // 实时更新字幕
+      updateTranscript(result.data.result);
+    }
+  };
+};
+```
+
+#### 3.1.2 Web Speech API 兜底
+
+当讯飞服务不可用时，使用浏览器原生 Web Speech API：
+
+```typescript
+// Web Speech API 兜底方案
+const fallbackToWebSpeech = () => {
+  const recognition = new webkitSpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'zh-CN';
+  
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results)
+      .map(result => result[0].transcript)
+      .join('');
+    updateTranscript(transcript);
+  };
+  
+  recognition.start();
+};
+```
+
+### 3.2 意图解析模块
+
+#### 3.2.1 DrawInstruction 数据结构
+
+```typescript
+interface DrawInstruction {
+  shapes: Shape[];
+  backgroundColor?: string | null;
+}
+
+interface Shape {
+  type: 'rectangle' | 'circle' | 'line' | 'triangle' | 'text';
+  x: number;      // X 坐标 (0-800)
+  y: number;      // Y 坐标 (0-600)
+  width?: number;     // 矩形宽度
+  height?: number;    // 矩形/三角形高度
+  radius?: number;    // 圆形半径
+  x2?: number;        // 直线终点 X
+  y2?: number;        // 直线终点 Y
+  text?: string;      // 文字内容
+  fillColor?: string; // 填充颜色 (HEX)
+  strokeColor?: string; // 描边颜色
+  strokeWidth?: number; // 描边宽度
+}
+```
+
+#### 3.2.2 本地 NLP 解析规则
+
+```typescript
+// 形状关键词映射
+const shapeKeywords = {
+  '圆形': 'circle',
+  '圆': 'circle',
+  '矩形': 'rectangle',
+  '方形': 'rectangle',
+  '矩形': 'rectangle',
+  '三角形': 'triangle',
+  '三角': 'triangle',
+  '直线': 'line',
+  '线': 'line',
+  '五角星': 'star',
+  '星星': 'star'
+};
+
+// 颜色关键词映射（马卡龙色系）
+const colorKeywords = {
+  '红色': '#FF6B6B',
+  '蓝色': '#B5D5F5',
+  '绿色': '#B5E8C7',
+  '粉色': '#FFB7C5',
+  '黄色': '#FFE5A0',
+  '紫色': '#D4C5F5',
+  '橙色': '#FFA94D',
+  '白色': '#FFFFFF',
+  '黑色': '#1A1A1A'
+};
+
+// 位置锚点映射
+const positionKeywords = {
+  '中间': { x: 400, y: 300 },
+  '中央': { x: 400, y: 300 },
+  '左边': { x: 150, y: 300 },
+  '左侧': { x: 150, y: 300 },
+  '右边': { x: 650, y: 300 },
+  '右侧': { x: 650, y: 300 },
+  '上面': { x: 400, y: 100 },
+  '顶部': { x: 400, y: 100 },
+  '下面': { x: 400, y: 500 },
+  '底部': { x: 400, y: 500 }
+};
+
+// 尺寸关键词映射
+const sizeKeywords = {
+  '大': { scale: 1.5 },
+  '很大': { scale: 2 },
+  '大大的': { scale: 2 },
+  '小': { scale: 0.5 },
+  '很小': { scale: 0.3 },
+  '小小的': { scale: 0.3 },
+  '中': { scale: 1 },
+  '普通': { scale: 1 }
+};
+```
+
+### 3.3 Canvas 绘图模块
+
+#### 3.3.1 绘图流程
+
+```typescript
+const drawShapes = async (instructions: DrawInstruction) => {
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext('2d');
+  
+  // 1. 设置画布尺寸
+  canvas.width = 800;
+  canvas.height = 600;
+  
+  // 2. 绘制背景
+  ctx.fillStyle = instructions.backgroundColor || '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // 3. 遍历绘制每个图形（带动画）
+  for (const shape of instructions.shapes) {
+    // GSAP 画笔移动动画
+    await moveBrushTo(shape.x, shape.y);
+    
+    // 绘制图形动画
+    await drawShapeWithAnimation(ctx, shape);
+    
+    // 更新操作栈
+    addToHistory(shape);
+  }
+};
+```
+
+#### 3.3.2 撤销/重做栈设计
+
+```typescript
+interface HistoryState {
+  shapes: Shape[];
+  canvasData: string; // Canvas toDataURL
+}
+
+class HistoryManager {
+  private undoStack: HistoryState[] = [];
+  private redoStack: HistoryState[] = [];
+  private maxHistory = 50;
+  
+  // 记录状态
+  push(state: HistoryState) {
+    this.undoStack.push(state);
+    if (this.undoStack.length > this.maxHistory) {
+      this.undoStack.shift();
+    }
+    this.redoStack = []; // 清空重做栈
+  }
+  
+  // 撤销
+  undo(): HistoryState | null {
+    if (this.undoStack.length > 1) {
+      const current = this.undoStack.pop();
+      this.redoStack.push(current);
+      return this.undoStack[this.undoStack.length - 1];
+    }
+    return null;
+  }
+  
+  // 重做
+  redo(): HistoryState | null {
+    if (this.redoStack.length > 0) {
+      const state = this.redoStack.pop();
+      this.undoStack.push(state);
+      return state;
+    }
+    return null;
+  }
+}
+```
+
+### 3.4 数据存储模块
+
+#### 3.4.1 localStorage Schema
+
+```typescript
+// 用户数据
+interface User {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+// 作品数据
+interface Artwork {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  canvasData: string; // Canvas toDataURL
+  shapes: Shape[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// localStorage keys
+const STORAGE_KEYS = {
+  CURRENT_USER: 'voicecanvas_current_user',
+  ARTWORKS: 'voicecanvas_artworks',
+  CURRENT_ARTWORK: 'voicecanvas_current_artwork'
+};
+```
+
+#### 3.4.2 MockDB 实现
+
+```typescript
+class MockDB {
+  // 用户操作
+  async getCurrentUser(): Promise<User | null> {
+    const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    return data ? JSON.parse(data) : null;
+  }
+  
+  async loginAsGuest(): Promise<User> {
+    const user = {
+      id: `guest_${Date.now()}`,
+      name: '访客用户',
+      createdAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    return user;
+  }
+  
+  async logout(): Promise<void> {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+  }
+  
+  // 作品操作
+  async saveArtwork(artwork: Omit<Artwork, 'id' | 'createdAt'>): Promise<Artwork> {
+    const artworks = await this.getArtworks();
+    const newArtwork = {
+      ...artwork,
+      id: `artwork_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    artworks.push(newArtwork);
+    localStorage.setItem(STORAGE_KEYS.ARTWORKS, JSON.stringify(artworks));
+    return newArtwork;
+  }
+  
+  async getArtworks(): Promise<Artwork[]> {
+    const data = localStorage.getItem(STORAGE_KEYS.ARTWORKS);
+    return data ? JSON.parse(data) : [];
+  }
+  
+  async deleteArtwork(id: string): Promise<void> {
+    const artworks = await this.getArtworks();
+    const filtered = artworks.filter(a => a.id !== id);
+    localStorage.setItem(STORAGE_KEYS.ARTWORKS, JSON.stringify(filtered));
+  }
+}
+```
+
+---
+
+## 4. UI/UX 设计规范
+
+### 4.1 颜色系统
+
+采用马卡龙色系，温和友好：
+
+| Token | 颜色名 | HEX | 用途 |
+|-------|--------|-----|------|
+| `--color-sakura` | 樱花粉 | `#FFB7C5` | 麦克风激活、录音动画 |
+| `--color-macaron-blue` | 马卡龙蓝 | `#B5D5F5` | 意图弹框、默认颜色 |
+| `--color-mint` | 薄荷绿 | `#B5E8C7` | 成功状态 |
+| `--color-butter` | 奶油黄 | `#FFE5A0` | 警告提示 |
+| `--color-lavender` | 薰衣草紫 | `#D4C5F5` | AI 模式标识 |
+| `--color-text-primary` | 深灰黑 | `#1A1A1A` | 主要文字（禁止纯黑） |
+
+### 4.2 动画规范
+
+所有交互动画使用 GSAP：
+
+| 场景 | 时长 | Ease |
+|------|------|------|
+| 微交互（hover/active） | 100-150ms | `power1.out` |
+| 页面元素出现 | 200ms | `power2.out` |
+| 弹框弹出 | 350-450ms | `back.out(1.8)` |
+| 录音脉冲 ripple | 1400ms | `power1.out` ∞ |
+| Canvas 图形生成 | 650ms | `back.out(1.6)` |
+| 错误 shake | 400ms | 左右 6px × 4 次 |
+
+### 4.3 无障碍规范
+
+符合 WCAG 2.1 AA 标准：
+
+1. **颜色对比度**：正文 ≥ 4.5:1
+2. **焦点样式**：品牌色焦点环（`#FFB7C5`）
+3. **触控目标**：最小 44×44px；麦克风按钮 ≥ 80×80px
+4. **ARIA 属性**：
+   - 麦克风按钮：`aria-pressed`、`aria-label`
+   - 字幕区：`role="status"` + `aria-live="polite"`
+   - 画布：`role="img"` + `aria-label`
+
+---
+
+## 5. 性能目标
+
+| 指标 | 目标值 | 说明 |
+|------|--------|------|
+| ASR 首字延迟 | < 1.5s | 语音结束到转录出现 |
+| 意图识别耗时 | < 2s | 本地解析，近实时 |
+| Canvas 绘制延迟 | < 200ms | 本地操作 |
+| 交互反馈延迟 | < 100ms | 动画响应 |
+
+---
+
+## 6. 技术约束
+
+### 6.1 必须使用
+
+- **框架**：Next.js 16 App Router（禁止 Pages Router）
+- **样式**：Tailwind CSS v4（使用 `@theme` 语法）
+- **动画**：GSAP（唯一指定动画库）
+- **图标**：lucide-react（唯一允许的图标库）
+- **Canvas**：HTML5 Canvas API（禁止 Konva.js）
+
+### 6.2 禁止使用
+
+- Framer Motion、Three.js、Konva.js 等未批准依赖
+- Tailwind `dark:` 深色模式类
+- Pages Router（`pages/` 目录）
+- 裸 HEX 颜色值（必须用 Token）
+- 纯黑 `#000000` 文字颜色
+
+---
+
+## 7. 未来规划
+
+### 7.1 v1.1 版本（黑客松后 2 周）
+
+- 元素选中与移动语义理解
+- 多图层支持
+- 语音引导教程
+- Supabase 云端存储
+
+### 7.2 v2.0 版本（长期）
+
+- 多语言支持（粤语、英语）
+- 手写板叠加（语音 + 辅助手写）
+- 教育版（教师作品模板）
+- 实时协同创作
+- PWA 离线支持
+
+---
+
+## 8. 附录
+
+### 8.1 语音指令示例
+
+| 指令类型 | 示例语音 | 解析结果 |
+|---------|---------|---------|
+| 基础形状 | "画一个圆形" | `{ type: 'circle', x: 400, y: 300, radius: 50 }` |
+| 颜色指定 | "画一个红色矩形" | `{ type: 'rectangle', fillColor: '#FF6B6B' }` |
+| 位置指定 | "在左边画一个三角形" | `{ type: 'triangle', x: 150, y: 300 }` |
+| 尺寸指定 | "画一个很大的圆" | `{ type: 'circle', radius: 100 }` |
+| 文字写入 | "写上'你好世界'" | `{ type: 'text', text: '你好世界' }` |
+| 控制指令 | "撤销" | 执行 undo() |
+| 控制指令 | "清空画布" | 清空 Canvas |
+
+### 8.2 环境变量配置
+
+```bash
+# 讯飞语音 API
+XFYUN_APP_ID=xxx
+XFYUN_API_KEY=xxx
+XFYUN_API_SECRET=xxx
+
+# 未来：Supabase
+NEXT_PUBLIC_SUPABASE_URL=xxx
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
+SUPABASE_SERVICE_ROLE_KEY=xxx
+DATABASE_URL=xxx
+DIRECT_URL=xxx
+```
+
+---
+
+## 9. 参考文档
+
+- [产品需求文档 (PRD.md)](./PRD.md)
+- [技术设计文档 (TDD.md)](./TDD.md)
+- [UI 设计规范 (UI_STYLE.md)](./UI_STYLE.md)
+- [项目 README](./README.md)

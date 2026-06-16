@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Mic, MicOff, AlertCircle, Send, X } from "lucide-react";
-import gsap from "gsap";
+import { Mic, MicOff, AlertCircle, X } from "lucide-react";
+import { normalizeVoiceTranscript, shouldRetryTranscript } from "../lib/voice-normalize";
 
 interface VoiceInputProps {
   onTranscriptChange: (transcript: string) => void;
@@ -67,25 +67,37 @@ interface XfyunResult {
 export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, transcript }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [manualInput, setManualInput] = useState("");
   const [partialResult, setPartialResult] = useState("");
+  const [isRetrying, setIsRetrying] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const isStopRef = useRef(false);
   const latestTextRef = useRef("");
   const hasFinalizedRef = useRef(false);
   const onFinalResultRef = useRef(onFinalResult);
+  const retryCountRef = useRef(0);
 
   useEffect(() => {
     onFinalResultRef.current = onFinalResult;
   }, [onFinalResult]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback((options?: { preserveText?: boolean; skipFinalize?: boolean }) => {
     setIsListening(false);
     isStopRef.current = true;
 
-    if (!hasFinalizedRef.current && onFinalResultRef.current && latestTextRef.current.trim()) {
+    if (
+      !options?.skipFinalize &&
+      !hasFinalizedRef.current &&
+      onFinalResultRef.current &&
+      latestTextRef.current.trim()
+    ) {
+      const normalized = normalizeVoiceTranscript(latestTextRef.current).normalized;
+      if (normalized) {
+        latestTextRef.current = normalized;
+        onTranscriptChange(normalized);
+      }
       hasFinalizedRef.current = true;
       onFinalResultRef.current(latestTextRef.current.trim());
     }
@@ -139,10 +151,17 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       }
       audioContextRef.current = null;
     }
-  }, []);
 
-  const handleStart = useCallback(async () => {
-    // 立即清空上一次的内容，只显示当前识别结果
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (!options?.preserveText) {
+      latestTextRef.current = "";
+    }
+  }, [onTranscriptChange]);
+
+  const startRecognition = useCallback(async function runRecognitionSession() {
     setRuntimeError(null);
     setPartialResult("");
     onTranscriptChange("");
@@ -150,16 +169,12 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
     hasFinalizedRef.current = false;
     latestTextRef.current = "";
 
-    // 立即设置为正在听状态，显示动画反馈
     setIsListening(true);
 
     try {
-      console.log("正在请求麦克风权限...");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log("麦克风权限获取成功");
+      mediaStreamRef.current = stream;
       
-      // 调用后端API获取WebSocket URL
-      console.log("正在获取语音识别连接...");
       const apiResponse = await fetch('/api/voice/transcribe', {
         method: 'POST',
         headers: {
@@ -175,7 +190,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       }
       
       const { wsUrl, appId } = apiData;
-      console.log("WebSocket URL:", wsUrl);
       
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -225,7 +239,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       };
 
       ws.onopen = () => {
-        console.log("WebSocket 连接成功");
         const startPacket = {
           header: {
             app_id: appId,
@@ -237,7 +250,7 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
               domain: "slm",
               language: "zh_cn",
               accent: "mandarin",
-              eos: 6000,
+              eos: 4500,
               dwa: "wpgs",
               result: {
                 encoding: "utf8",
@@ -262,7 +275,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       };
 
       ws.onmessage = (event: MessageEvent) => {
-        console.log("收到讯飞消息:", event.data);
         try {
           const result: XfyunResult = JSON.parse(event.data);
           
@@ -287,7 +299,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
                 bytes[i] = binaryString.charCodeAt(i);
               }
               const decodedText = new TextDecoder('utf-8').decode(bytes);
-              console.log("解码后的文本:", decodedText);
               
               const decodedResult: XfyunDecodedResult = JSON.parse(decodedText);
               
@@ -303,9 +314,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
                   }
                 });
                 
-                console.log("当前帧识别结果:", frameText);
-                
-                // 如果当前帧是句号且之前已有结果，不覆盖，只累积
                 if (frameText === "。" && latestTextRef.current.trim()) {
                   currentFrameText = latestTextRef.current + frameText;
                   latestTextRef.current = currentFrameText;
@@ -313,9 +321,10 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
                   currentFrameText = frameText;
                   latestTextRef.current = frameText;
                 }
-                
-                setPartialResult(latestTextRef.current);
-                onTranscriptChange(latestTextRef.current);
+
+                const previewText = normalizeVoiceTranscript(latestTextRef.current).normalized;
+                setPartialResult(previewText);
+                onTranscriptChange(previewText);
               }
             } catch (decodeError) {
               console.error("解码讯飞响应失败:", decodeError);
@@ -326,22 +335,40 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
             const wsData = result.data.result.ws;
             if (wsData && wsData.length > 0) {
               const text = wsData.map((item: XfyunWs) => item.onebest || "").join("");
-              currentFrameText = text;
-              latestTextRef.current = text;
-              setPartialResult(text);
-              onTranscriptChange(text);
+              const normalizedText = normalizeVoiceTranscript(text).normalized;
+              currentFrameText = normalizedText;
+              latestTextRef.current = normalizedText;
+              setPartialResult(normalizedText);
+              onTranscriptChange(normalizedText);
             }
           }
           
           const headerStatus = result.header?.status;
           const resultStatus = result.payload?.result?.status;
           if (headerStatus === 2 || resultStatus === 2) {
-            console.log("收到最后一帧，停止识别");
-            if (!hasFinalizedRef.current && onFinalResultRef.current && currentFrameText.trim()) {
-              hasFinalizedRef.current = true;
-              onFinalResultRef.current(currentFrameText.trim());
+            const normalizedFinal = normalizeVoiceTranscript(
+              currentFrameText.trim() || latestTextRef.current.trim()
+            ).normalized;
+
+            if (!normalizedFinal || shouldRetryTranscript(normalizedFinal)) {
+              if (retryCountRef.current < 1) {
+                retryCountRef.current += 1;
+                setIsRetrying(true);
+                handleStop({ preserveText: true, skipFinalize: true });
+                window.setTimeout(() => {
+                  void runRecognitionSession().finally(() => setIsRetrying(false));
+                }, 300);
+                return;
+              }
             }
-            handleStop();
+
+            if (!hasFinalizedRef.current && onFinalResultRef.current && normalizedFinal) {
+              latestTextRef.current = normalizedFinal;
+              onTranscriptChange(normalizedFinal);
+              hasFinalizedRef.current = true;
+              onFinalResultRef.current(normalizedFinal);
+            }
+            handleStop({ preserveText: true });
           }
         } catch (e) {
           console.error("解析讯飞响应失败:", e);
@@ -355,7 +382,6 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       };
 
       ws.onclose = (event) => {
-        console.log("WebSocket 连接关闭:", event.code, event.reason);
         setIsListening(false);
       };
 
@@ -367,12 +393,14 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       } else {
         setRuntimeError(`无法启动语音识别: ${errorMsg}`);
       }
+      setIsListening(false);
     }
   }, [handleStop, onTranscriptChange]);
 
   const startListening = useCallback(() => {
-    handleStart();
-  }, [handleStart]);
+    retryCountRef.current = 0;
+    void startRecognition();
+  }, [startRecognition]);
 
   const stopListening = useCallback(() => {
     handleStop();
@@ -380,15 +408,10 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
 
   const clearTranscript = useCallback(() => {
     onTranscriptChange("");
-    setManualInput("");
     setPartialResult("");
+    latestTextRef.current = "";
+    retryCountRef.current = 0;
   }, [onTranscriptChange]);
-
-  const handleManualSubmit = useCallback(() => {
-    if (manualInput.trim()) {
-      onTranscriptChange(manualInput.trim());
-    }
-  }, [manualInput, onTranscriptChange]);
 
   return (
     <div className="w-full">
@@ -427,6 +450,7 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
         
         <button
           onClick={clearTranscript}
+          disabled={!transcript && !partialResult}
           className="p-3 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
           aria-label="清空"
         >
@@ -438,6 +462,13 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
         <div className="mt-3 flex items-center justify-center gap-2 text-sakura">
           <div className="w-2 h-2 bg-sakura rounded-full animate-pulse" />
           <span className="text-sm">正在录音...</span>
+        </div>
+      )}
+
+      {isRetrying && (
+        <div className="mt-2 flex items-center justify-center gap-2 text-xs text-text-secondary">
+          <div className="h-2 w-2 rounded-full bg-lavender animate-pulse" />
+          <span>刚刚没听清，正在再试一次…</span>
         </div>
       )}
       

@@ -12,6 +12,7 @@ import {
   Layers,
   X,
   ArrowLeft,
+  Edit3,
 } from "lucide-react";
 import gsap from "gsap";
 import { authDB, artworkDB, Artwork, User as UserType } from "../lib/db";
@@ -121,6 +122,11 @@ export default function GalleryPage() {
   // 返回画布
   const handleBackToCanvas = () => {
     router.push("/canvas");
+  };
+
+  // 编辑作品（二次创作）
+  const handleEdit = (artwork: Artwork) => {
+    router.push(`/canvas?edit=${artwork.id}`);
   };
 
   // 切换选择模式
@@ -382,6 +388,14 @@ export default function GalleryPage() {
                     {/* Hover overlay - only show when not in selection mode */}
                     {!selectionMode && (
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4 gap-2">
+                        <button
+                          onClick={() => handleEdit(artwork)}
+                          className="p-2 rounded-full bg-white/90 hover:bg-white text-sakura transition-all"
+                          aria-label="编辑作品"
+                          title="编辑"
+                        >
+                          <Edit3 className="w-5 h-5" />
+                        </button>
                         <button
                           onClick={() => handleDownload(artwork)}
                           className="p-2 rounded-full bg-white/90 hover:bg-white text-text-primary transition-all"

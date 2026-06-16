@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, Suspense } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Image,
@@ -27,14 +27,15 @@ import {
   LineChart,
 } from 'lucide-react';
 import { gsap } from 'gsap';
-import { useRouter } from 'next/navigation';
-import { authDB, artworkDB, promptHistoryDB } from '../lib/db';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { authDB, artworkDB, promptHistoryDB, Artwork } from '../lib/db';
 import type { User as UserType } from '../lib/db';
 import { DrawInstruction, Shape } from '../lib/draw-schema';
 import {
   AddBatchHistoryEntry,
   applyAddMany,
   coolShapesByIds,
+  deserializeState,
   emptyState,
   ensureIds,
   moveShapesByIds,
@@ -54,6 +55,7 @@ import ChildGuide from '../components/ChildGuide';
 
 export default function CanvasPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const tCanvas = useTranslations('canvas');
   const tTeaching = useTranslations('teaching');
 
@@ -120,6 +122,16 @@ export default function CanvasPage() {
   const [toasts, setToasts] = useState<{ id: string; type: 'success' | 'error' | 'warning' | 'info'; message: string }[]>([]);
   const toastIdCounter = useRef(0);
 
+  // 存储编辑参数，供后续使用
+  const [editArtworkId, setEditArtworkId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId) {
+      setEditArtworkId(editId);
+    }
+  }, [searchParams]);
+
   // 加载用户信息
   useEffect(() => {
     const loadUser = async () => {
@@ -128,6 +140,27 @@ export default function CanvasPage() {
     };
     loadUser();
   }, []);
+
+  // 用户和编辑ID都就绪后，加载作品
+  useEffect(() => {
+    if (!editArtworkId || !user) return;
+
+    const loadArtwork = async () => {
+      try {
+        const artwork = await artworkDB.getByUserId(user.id);
+        const targetArtwork = artwork.find(a => a.id === editArtworkId);
+        if (targetArtwork) {
+          await loadArtworkForEdit(targetArtwork);
+        }
+      } catch (error) {
+        console.error('加载作品失败:', error);
+        addToast('error', '加载作品失败');
+      }
+    };
+
+    // 使用 setTimeout 确保 loadArtworkForEdit 已经定义
+    setTimeout(loadArtwork, 0);
+  }, [editArtworkId, user]);
 
   const addToast = useCallback((type: 'success' | 'error' | 'warning' | 'info', message: string) => {
     const id = `${Date.now()}-${toastIdCounter.current++}`;
@@ -625,6 +658,122 @@ export default function CanvasPage() {
     }
   }
 
+  // 计算当前进度下画笔应该在的位置
+  const getBrushPositionAtProgress = useCallback((shape: Shape, progress: number): { x: number; y: number } => {
+    switch (shape.type) {
+      case 'rectangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        const { x, y } = toTopLeft(shape);
+        const cw = w * progress;
+        const ch = h * progress;
+        // 矩形：从左上角开始，顺时针移动
+        if (progress <= 0.25) {
+          return { x: x + cw, y: y };
+        } else if (progress <= 0.5) {
+          return { x: x + w, y: y + ch };
+        } else if (progress <= 0.75) {
+          return { x: x + w - (progress - 0.5) * w * 2, y: y + h };
+        } else {
+          return { x: x, y: y + h - (progress - 0.75) * h * 2 };
+        }
+      }
+      case 'circle': {
+        const r = Math.max(1, shape.radius || 50);
+        const angle = -Math.PI / 2 + Math.PI * 2 * progress;
+        return {
+          x: shape.x + Math.cos(angle) * r,
+          y: shape.y + Math.sin(angle) * r,
+        };
+      }
+      case 'ellipse': {
+        const rx = Math.max(1, shape.rx || 50);
+        const ry = Math.max(1, shape.ry || 30);
+        const angle = -Math.PI / 2 + Math.PI * 2 * progress;
+        return {
+          x: shape.x + Math.cos(angle) * rx,
+          y: shape.y + Math.sin(angle) * ry,
+        };
+      }
+      case 'line': {
+        const endX = shape.x2 ?? shape.x + 100;
+        const endY = shape.y2 ?? shape.y;
+        return {
+          x: shape.x + (endX - shape.x) * progress,
+          y: shape.y + (endY - shape.y) * progress,
+        };
+      }
+      case 'triangle': {
+        const w = shape.width || 100;
+        const h = shape.height || 100;
+        const { x, y } = toTopLeft(shape);
+        const seg = [w, Math.hypot(w / 2, h), h];
+        const total = seg.reduce((a, b) => a + b, 0);
+        let remain = total * progress;
+        
+        // 左下 -> 右下（底边）
+        const d1 = Math.min(remain, seg[0]);
+        if (d1 > 0) {
+          if (remain <= seg[0]) {
+            return { x: x + remain, y: y + h };
+          }
+          remain -= d1;
+        }
+        
+        // 右下 -> 顶（右斜边）
+        const d2 = Math.min(remain, seg[1]);
+        if (d2 > 0) {
+          const t = d2 / seg[1];
+          if (remain <= seg[1]) {
+            const t2 = remain / seg[1];
+            return { x: x + w - (w / 2) * t2, y: y + h - h * t2 };
+          }
+          remain -= d2;
+        }
+        
+        // 顶 -> 左下（左斜边）
+        const t = remain / seg[2];
+        return { x: x + (w / 2) * (1 - t), y: y + h - h * (1 - t) };
+      }
+      case 'polygon': {
+        const pts = shape.points || [];
+        if (pts.length < 6) return { x: shape.x, y: shape.y };
+        const verts: [number, number][] = [];
+        for (let i = 0; i + 1 < pts.length; i += 2) verts.push([pts[i], pts[i + 1]]);
+        
+        const dist: number[] = [];
+        let total = 0;
+        for (let i = 0; i < verts.length; i++) {
+          const [ax, ay] = verts[i];
+          const [bx, by] = verts[(i + 1) % verts.length];
+          const d = Math.hypot(bx - ax, by - ay);
+          dist.push(d);
+          total += d;
+        }
+        
+        let remain = total * progress;
+        for (let i = 0; i < verts.length && remain > 0; i++) {
+          const [ax, ay] = verts[i];
+          const [bx, by] = verts[(i + 1) % verts.length];
+          const d = dist[i];
+          if (remain >= d) {
+            remain -= d;
+          } else {
+            const t = remain / d;
+            return { x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
+          }
+        }
+        return { x: verts[0][0], y: verts[0][1] };
+      }
+      case 'text': {
+        // 文字：从左到右移动
+        return { x: shape.x, y: shape.y };
+      }
+      default:
+        return { x: shape.x, y: shape.y };
+    }
+  }, [toTopLeft]);
+
   // 把单个 shape 按 progress (0-1) 绘制"生长中"的预览（描边渐进 + 后半段淡入填充）
   const drawProgressiveShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape, progress: number) => {
     const opacity = shape.opacity ?? 1;
@@ -830,6 +979,23 @@ export default function CanvasPage() {
     }
   }, [drawSingleShape]);
 
+  // 加载作品进行编辑
+  const loadArtworkForEdit = useCallback(async (artwork: Artwork) => {
+    const state = deserializeState(artwork.canvasData);
+    if (state) {
+      setCanvasState(state);
+      setCurrentArtworkId(artwork.id);
+      setSaveTitle(artwork.title);
+      setHasUnsavedChanges(false);
+      addToast('success', '已加载作品，可继续创作');
+      // 重绘画布
+      redrawFromState(state);
+    } else {
+      // 如果无法解析canvasData，尝试从thumbnail恢复
+      addToast('warning', '作品数据异常，已创建新画布');
+    }
+  }, [addToast, redrawFromState]);
+
   // 绘制图形到 Canvas（双缓冲 + 画笔动画）
   //
   // 核心改进：用离屏 canvas 作为「已提交图层」，每个元素动画完成后才 commit。
@@ -878,8 +1044,11 @@ export default function CanvasPage() {
       const shape = ordered[i];
       const bounds = getShapeBounds(shape);
 
-      // 画笔移动到元素附近
-      await moveBrush(bounds.x, bounds.y);
+      // 显示画笔
+      setBrushVisible(true);
+      // 画笔移动到元素起点
+      const startPos = getBrushPositionAtProgress(shape, 0);
+      gsap.set(brushPosition, { x: startPos.x, y: startPos.y });
 
       if (prefersReduced) {
         // 减弱运动：直接画到离屏层并 commit
@@ -898,6 +1067,11 @@ export default function CanvasPage() {
         ctx.drawImage(offscreen, 0, 0);
         // 叠加当前正在生长的元素
         drawProgressiveShape(ctx, shape, progress);
+        
+        // 实时更新画笔位置跟随绘制进度
+        const brushPos = getBrushPositionAtProgress(shape, progress);
+        gsap.set(brushPosition, { x: brushPos.x, y: brushPos.y });
+        
         await waitFrame();
       }
 
@@ -907,7 +1081,14 @@ export default function CanvasPage() {
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       ctx.drawImage(offscreen, 0, 0);
 
-      await moveBrush(bounds.x + bounds.w, bounds.y + bounds.h, 0.2);
+      // 画笔移动到元素终点
+      const endPos = getBrushPositionAtProgress(shape, 1);
+      gsap.to(brushPosition, {
+        x: endPos.x,
+        y: endPos.y,
+        duration: 0.2,
+        ease: 'power2.out',
+      });
     }
 
     // 全局氛围：vignette 边缘暗角，增加画面聚焦感
@@ -946,7 +1127,7 @@ export default function CanvasPage() {
       { scale: 0.98, opacity: 0.9 },
       { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.4)' }
     );
-  }, [moveBrush, drawSingleShape, drawProgressiveShape, getShapeBounds]);
+  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds]);
 
   const drawAppendBatch = useCallback(async (committedState: CanvasState, incomingShapes: Shape[]) => {
     const canvas = canvasRef.current;
@@ -979,7 +1160,12 @@ export default function CanvasPage() {
 
     for (const shape of [...incomingShapes].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))) {
       const bounds = getShapeBounds(shape);
-      await moveBrush(bounds.x, bounds.y);
+
+      // 显示画笔
+      setBrushVisible(true);
+      // 画笔移动到元素起点
+      const startPos = getBrushPositionAtProgress(shape, 0);
+      gsap.set(brushPosition, { x: startPos.x, y: startPos.y });
 
       if (prefersReduced) {
         drawSingleShape(offCtx, shape);
@@ -994,13 +1180,26 @@ export default function CanvasPage() {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         ctx.drawImage(offscreen, 0, 0);
         drawProgressiveShape(ctx, shape, progress);
+        
+        // 实时更新画笔位置跟随绘制进度
+        const brushPos = getBrushPositionAtProgress(shape, progress);
+        gsap.set(brushPosition, { x: brushPos.x, y: brushPos.y });
+        
         await waitFrame();
       }
 
       drawSingleShape(offCtx, shape);
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       ctx.drawImage(offscreen, 0, 0);
-      await moveBrush(bounds.x + bounds.w, bounds.y + bounds.h, 0.2);
+      
+      // 画笔移动到元素终点
+      const endPos = getBrushPositionAtProgress(shape, 1);
+      gsap.to(brushPosition, {
+        x: endPos.x,
+        y: endPos.y,
+        duration: 0.2,
+        ease: 'power2.out',
+      });
     }
 
     if (committedState.vignette?.strength) {
@@ -1023,7 +1222,7 @@ export default function CanvasPage() {
     setTimeout(() => {
       setBrushVisible(false);
     }, 500);
-  }, [drawProgressiveShape, drawSingleShape, getShapeBounds, moveBrush]);
+  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds]);
 
   // 初始化Canvas
   useEffect(() => {

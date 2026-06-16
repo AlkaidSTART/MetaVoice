@@ -20,7 +20,9 @@ export type CanvasEditCommand =
       kind: "none";
     };
 
-const POSITION_PATTERNS: Array<[CanvasEditCommand["position"], RegExp]> = [
+type PositionType = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center" | "left" | "right" | "top" | "bottom";
+
+const POSITION_PATTERNS: Array<[PositionType, RegExp]> = [
   ["top-left", /左上角/],
   ["top-right", /右上角/],
   ["bottom-left", /左下角/],

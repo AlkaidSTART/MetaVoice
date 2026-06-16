@@ -59,7 +59,8 @@ export default function GalleryPage() {
       }
     };
     checkAuth();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 页面入场动画
   useEffect(() => {

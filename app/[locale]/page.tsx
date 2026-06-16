@@ -8,7 +8,8 @@ export default function DefaultPage() {
 
   useEffect(() => {
     router.push('/login');
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }

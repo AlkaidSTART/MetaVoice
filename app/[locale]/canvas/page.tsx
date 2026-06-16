@@ -196,7 +196,8 @@ export default function CanvasPage() {
       setUser(currentUser);
     };
     loadUser();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 用户和编辑ID都就绪后，加载作品
   useEffect(() => {

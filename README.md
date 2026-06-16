@@ -5,7 +5,7 @@
 ## 📺 视频演示
 
 **B站视频链接**：[https://www.bilibili.com/video/BV1pSJA6NEUw/?spm_id_from=333.1387.homepage.video_card.click&vd_source=5da587cf9716888499951dd0c8cc205d]
-
+**项目链接**：[https://gisfy.alkaid.live/zh/canvas]
 ---
 
 ## 🏗️ 业务架构

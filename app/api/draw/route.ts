@@ -2,19 +2,14 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
 import { drawInstructionSchema } from "../../lib/draw-schema";
 import type { DrawInstruction } from "../../lib/draw-schema";
-import { buildContextSection, getPromptBuilders, summarizeContext, type DrawContext } from "./prompts";
+import { buildContextSection, getPromptBuilders, type DrawContext } from "./prompts";
 
-const MODEL_STEP_TIMEOUT_MS = 45_000;
 const SIMPLE_PROMPT_LENGTH_THRESHOLD = 24;
 const SIMPLE_SHAPE_KEYWORDS = ["圆", "圆形", "矩形", "方形", "三角形", "直线", "星星", "五角星", "写上"];
 
 function normalizeDrawError(error: unknown): Error {
   const message =
     error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown draw error";
-
-  if (/abort|timed out|timeout/i.test(message)) {
-    return new Error("绘图生成超时，请稍后重试或缩短描述");
-  }
 
   if (/Missing OPENAI_API_KEY/i.test(message)) {
     return new Error("绘图模型未配置 OPENAI_API_KEY");
@@ -37,7 +32,6 @@ async function generateModelText(
     temperature,
     prompt,
     maxRetries: 0,
-    timeout: { totalMs: MODEL_STEP_TIMEOUT_MS },
   });
 
   return result.text.trim();
@@ -109,33 +103,41 @@ function isSimpleTask(prompt: string, context?: DrawContext): boolean {
   return SIMPLE_SHAPE_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
-async function runAgent(model: LanguageModel, prompt: string, temperature: number): Promise<string> {
-  return generateModelText(model, prompt, temperature);
-}
-
 async function generateDrawInstruction(userPrompt: string, ctx?: DrawContext): Promise<DrawInstruction> {
-  const { buildPolishPrompt, buildCoordinatePrompt, buildDrawPrompt, buildValidatePrompt } = getPromptBuilders();
+  const { buildPolishPrompt, buildDrawPrompt } = getPromptBuilders();
   const appendMode = Boolean(ctx?.shapes.length);
   const useSimpleFlow = isSimpleTask(userPrompt, ctx);
-  const polishModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-flash");
-  const coordinateModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-flash");
-  const drawModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro");
-  const validateModel = getModelByName(useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro");
+  const polishModelName = "deepseek-v4-flash";
+  const drawModelName = useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro";
+  const polishModel = appendMode || !useSimpleFlow ? getModelByName(polishModelName) : null;
+  const drawModel = getModelByName(drawModelName);
 
-  const contextSummary = summarizeContext(ctx);
   const contextSection = buildContextSection(ctx);
+  const startedAt = Date.now();
 
-  const polishedPrompt = await runAgent(polishModel, buildPolishPrompt(userPrompt, appendMode), 0.1);
-  const layoutPlan = await runAgent(
-    coordinateModel,
-    buildCoordinatePrompt(polishedPrompt, contextSummary, appendMode),
-    0.15,
+  let effectivePrompt = userPrompt;
+  if (polishModel) {
+    const polishStartedAt = Date.now();
+    effectivePrompt = await generateModelText(
+      polishModel,
+      buildPolishPrompt(userPrompt, appendMode),
+      0.1,
+    );
+    console.log(`[draw] stage=polish model=${polishModelName} elapsedMs=${Date.now() - polishStartedAt}`);
+  }
+
+  const drawStartedAt = Date.now();
+  const rawJson = await generateModelText(
+    drawModel,
+    buildDrawPrompt(effectivePrompt, contextSection),
+    0.2,
   );
-  const rawJson = await runAgent(drawModel, buildDrawPrompt(layoutPlan, contextSection), 0.2);
-  const validatedJson = await runAgent(validateModel, buildValidatePrompt(rawJson, contextSection), 0.1);
+  console.log(`[draw] stage=draw model=${drawModelName} elapsedMs=${Date.now() - drawStartedAt}`);
 
-  const parsed = parseJsonSafe(validatedJson);
-  return drawInstructionSchema.parse(parsed);
+  const parsed = parseJsonSafe(rawJson);
+  const instruction = drawInstructionSchema.parse(parsed);
+  console.log(`[draw] pipeline=online-critical elapsedMs=${Date.now() - startedAt} appendMode=${appendMode} simple=${useSimpleFlow}`);
+  return instruction;
 }
 
 export async function POST(req: Request) {

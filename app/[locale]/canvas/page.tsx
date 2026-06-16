@@ -1742,7 +1742,8 @@ export default function CanvasPage() {
         });
 
         if (!response.ok) {
-          throw new Error('绘图生成失败');
+          const errorPayload = await parseJsonSafely(response).catch(() => null) as { error?: string } | null;
+          throw new Error(errorPayload?.error || '绘图生成失败');
         }
 
         instructions = await response.json();
@@ -1783,7 +1784,7 @@ export default function CanvasPage() {
       console.error('Draw error:', error);
       stopPresetAnimation();
       setIsThinking(false);
-      addToast('error', '绘图失败，请重试');
+      addToast('error', error instanceof Error ? error.message : '绘图失败，请重试');
     } finally {
       setIsDrawing(false);
       setIsAppending(false);

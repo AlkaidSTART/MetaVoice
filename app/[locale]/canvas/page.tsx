@@ -1192,14 +1192,23 @@ export default function CanvasPage() {
   // 彻底消除旧实现用 clearRect 局部清除导致的「误伤重叠元素」问题。
   const drawShapes = useCallback(async (instructions: DrawInstruction) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.error('drawShapes: canvasRef is null');
+      return;
+    }
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.error('drawShapes: cannot get 2D context');
+      return;
+    }
 
     // 复用离屏 canvas 单例，避免重复创建
     const offscreen = getOffscreenCanvas();
     const offCtx = offscreen.getContext('2d');
-    if (!offCtx) return;
+    if (!offCtx) {
+      console.error('drawShapes: cannot get offscreen 2D context');
+      return;
+    }
 
     // 背景
     const bgColor = instructions.backgroundColor || '#FFFFFF';
@@ -1407,10 +1416,16 @@ export default function CanvasPage() {
   // 初始化Canvas - 使用 useLayoutEffect 确保在渲染前完成初始化
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.error('Canvas init: canvasRef is null');
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.error('Canvas init: cannot get 2D context');
+      return;
+    }
 
     // 设置固定尺寸
     canvas.width = CANVAS_WIDTH;
@@ -1422,7 +1437,9 @@ export default function CanvasPage() {
 
     // 预创建离屏 canvas，避免首次绘制时的创建开销
     getOffscreenCanvas();
-  }, [getOffscreenCanvas]);
+    console.log('Canvas initialized successfully');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 画笔位置同步：gsap.ticker 每帧把 brushPosition ref 写入画笔 DOM 的 transform，
   // 绕开 React（位置不进 state）。卸载时移除 ticker，避免泄漏。

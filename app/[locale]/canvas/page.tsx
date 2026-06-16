@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, Suspense } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, Suspense } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Image,
@@ -100,6 +100,18 @@ export default function CanvasPage() {
 
   const CANVAS_WIDTH = 960;
   const CANVAS_HEIGHT = 720;
+
+  // 离屏 canvas 单例，避免每次绘制都创建新的 canvas
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const getOffscreenCanvas = useCallback(() => {
+    if (!offscreenCanvasRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = CANVAS_HEIGHT;
+      offscreenCanvasRef.current = canvas;
+    }
+    return offscreenCanvasRef.current;
+  }, []);
 
   const parseJsonSafely = useCallback(async (response: Response) => {
     const text = await response.text();
@@ -241,34 +253,38 @@ export default function CanvasPage() {
     ctx.restore();
   }, []);
 
-  // Canvas 预设动画循环
+  // Canvas 预设动画循环 - 优化：使用固定尺寸避免重复获取
   const animatePresetShapes = useCallback(function runPresetShapesAnimation() {
+    if (!isThinking) return;
+    
     const canvas = canvasRef.current;
-    if (!canvas || !isThinking) return;
+    if (!canvas) return;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    const width = canvas.width;
-    const height = canvas.height;
-    
     // 清除画布
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     // 绘制多个漂浮的预设图形
-    const centerX = width / 2;
-    const centerY = height / 2;
+    const centerX = CANVAS_WIDTH / 2;
+    const centerY = CANVAS_HEIGHT / 2;
     const time = Date.now() / 1000;
     
-    presetShapes.forEach((shape, index) => {
-      const angle = (index * (Math.PI * 2)) / presetShapes.length + time * 0.2;
-      const radius = 100 + (index * 30);
+    // 缓存计算结果，避免重复计算
+    const shapeCount = presetShapes.length;
+    const twoPi = Math.PI * 2;
+    
+    for (let i = 0; i < shapeCount; i++) {
+      const shape = presetShapes[i];
+      const angle = (i * twoPi) / shapeCount + time * 0.2;
+      const radius = 100 + (i * 30);
       const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius + Math.sin(time + index) * 20;
-      const progress = 0.5 + 0.5 * Math.sin(time * 2 + index);
+      const y = centerY + Math.sin(angle) * radius + Math.sin(time + i) * 20;
+      const progress = 0.5 + 0.5 * Math.sin(time * 2 + i);
       
       drawPresetShape(ctx, shape.type, shape.color, shape.size || 30, x, y, progress);
-    });
+    }
     
     shapeAnimationRef.current = requestAnimationFrame(runPresetShapesAnimation);
   }, [isThinking, presetShapes, drawPresetShape]);
@@ -1075,17 +1091,29 @@ export default function CanvasPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    // 直接绘制到主画布，无需离屏（非动画场景）
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     ctx.fillStyle = state.backgroundColor || '#FFFFFF';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    const ordered = [...state.shapes].sort((a, b) => {
-      const za = a.z ?? 0;
-      const zb = b.z ?? 0;
-      return za - zb;
-    });
+    // 排序优化：使用稳定排序，减少不必要的排序操作
+    const shapes = state.shapes;
+    if (shapes.length === 0) return;
+
+    // 只在必要时排序（如果已有正确顺序则跳过）
+    let needsSort = false;
+    for (let i = 1; i < shapes.length; i++) {
+      const prevZ = shapes[i - 1].z ?? 0;
+      const currZ = shapes[i].z ?? 0;
+      if (prevZ > currZ) {
+        needsSort = true;
+        break;
+      }
+    }
+
+    const ordered = needsSort
+      ? [...shapes].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
+      : shapes;
 
     for (const shape of ordered) {
       drawSingleShape(ctx, shape);
@@ -1137,13 +1165,8 @@ export default function CanvasPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-
-    // 离屏提交层（与主画布同尺寸）
-    const offscreen = document.createElement('canvas');
-    offscreen.width = CANVAS_WIDTH;
-    offscreen.height = CANVAS_HEIGHT;
+    // 复用离屏 canvas 单例，避免重复创建
+    const offscreen = getOffscreenCanvas();
     const offCtx = offscreen.getContext('2d');
     if (!offCtx) return;
 
@@ -1257,7 +1280,7 @@ export default function CanvasPage() {
       { scale: 0.98, opacity: 0.9 },
       { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.4)' }
     );
-  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds]);
+  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds, getOffscreenCanvas]);
 
   const drawAppendBatch = useCallback(async (committedState: CanvasState, incomingShapes: Shape[]) => {
     const canvas = canvasRef.current;
@@ -1265,12 +1288,8 @@ export default function CanvasPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = CANVAS_WIDTH;
-    offscreen.height = CANVAS_HEIGHT;
+    // 复用离屏 canvas 单例，避免重复创建
+    const offscreen = getOffscreenCanvas();
     const offCtx = offscreen.getContext('2d');
     if (!offCtx) return;
 
@@ -1352,10 +1371,10 @@ export default function CanvasPage() {
     setTimeout(() => {
       setBrushVisible(false);
     }, 500);
-  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds]);
+  }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds, getOffscreenCanvas]);
 
-  // 初始化Canvas
-  useEffect(() => {
+  // 初始化Canvas - 使用 useLayoutEffect 确保在渲染前完成初始化
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1369,7 +1388,10 @@ export default function CanvasPage() {
     // 初始化白色背景
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }, []);
+
+    // 预创建离屏 canvas，避免首次绘制时的创建开销
+    getOffscreenCanvas();
+  }, [getOffscreenCanvas]);
 
   // 画笔位置同步：gsap.ticker 每帧把 brushPosition ref 写入画笔 DOM 的 transform，
   // 绕开 React（位置不进 state）。卸载时移除 ticker，避免泄漏。

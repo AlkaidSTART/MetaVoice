@@ -198,7 +198,7 @@ export default function ChildGuide({ mode, hasArtwork, lastTranscript, copy }: C
               ref={transcriptRef}
               className="mt-2 rounded-2xl bg-white/80 px-3 py-2 text-xs text-text-secondary border border-sakura/5"
             >
-              "{lastTranscript}"
+              &ldquo;{lastTranscript}&rdquo;
             </p>
           ) : null}
         </div>

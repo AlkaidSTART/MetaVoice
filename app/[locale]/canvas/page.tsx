@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import {
-  Image,
+  Image as ImageIcon,
   LogOut,
   User,
   RotateCcw,
@@ -157,6 +157,29 @@ export default function CanvasPage() {
     }
     return offscreenCanvasRef.current;
   }, []);
+
+  const initializeCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('Canvas init: cannot get 2D context');
+      return;
+    }
+
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    getOffscreenCanvas();
+  }, [getOffscreenCanvas]);
+
+  const setCanvasNode = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    initializeCanvas(node);
+  }, [initializeCanvas]);
 
   const parseJsonSafely = useCallback(async (response: Response) => {
     const text = await response.text();
@@ -1413,34 +1436,6 @@ export default function CanvasPage() {
     }, 500);
   }, [drawProgressiveShape, drawSingleShape, getBrushPositionAtProgress, getShapeBounds, getOffscreenCanvas]);
 
-  // 初始化Canvas - 使用 useLayoutEffect 确保在渲染前完成初始化
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      console.error('Canvas init: canvasRef is null');
-      return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.error('Canvas init: cannot get 2D context');
-      return;
-    }
-
-    // 设置固定尺寸
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-
-    // 初始化白色背景
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // 预创建离屏 canvas，避免首次绘制时的创建开销
-    getOffscreenCanvas();
-    console.log('Canvas initialized successfully');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // 画笔位置同步：gsap.ticker 每帧把 brushPosition ref 写入画笔 DOM 的 transform，
   // 绕开 React（位置不进 state）。卸载时移除 ticker，避免泄漏。
   useEffect(() => {
@@ -1837,7 +1832,7 @@ export default function CanvasPage() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
             aria-label="打开图库"
           >
-            <Image className="w-5 h-5" />
+            <ImageIcon className="w-5 h-5" />
             <span className="text-sm hidden sm:inline">图库</span>
           </button>
 
@@ -1886,7 +1881,7 @@ export default function CanvasPage() {
 
             {/* Canvas */}
             <canvas
-              ref={canvasRef}
+              ref={setCanvasNode}
               className="absolute inset-0 m-auto max-w-full max-h-full"
               style={{ 
                 objectFit: 'contain',

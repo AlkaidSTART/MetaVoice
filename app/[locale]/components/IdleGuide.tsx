@@ -30,6 +30,187 @@ const DEMO_SCENARIOS = [
   },
 ];
 
+const runDemoCycle = (
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  tlRef: React.MutableRefObject<gsap.core.Timeline | null>,
+  indexRef: React.MutableRefObject<number>
+) => {
+  if (!canvasRef.current) return;
+
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  const drawBackground = () => {
+    ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = 'rgba(255, 183, 197, 0.08)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < width; i += 20) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, height);
+      ctx.stroke();
+    }
+    for (let i = 0; i < height; i += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(width, i);
+      ctx.stroke();
+    }
+  };
+
+  const drawShape = (scenario: typeof DEMO_SCENARIOS[0], progress: number) => {
+    drawBackground();
+
+    ctx.strokeStyle = scenario.color;
+    ctx.lineWidth = 2.5;
+    ctx.fillStyle = `${scenario.color}30`;
+
+    switch (scenario.shape) {
+      case 'circle': {
+        const radius = Math.max(1, 35 * progress);
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        if (progress > 0.3) {
+          ctx.fill();
+        }
+        break;
+      }
+      case 'rectangle': {
+        const w = Math.max(1, 70 * progress);
+        const h = Math.max(1, 50 * progress);
+        ctx.beginPath();
+        ctx.rect(centerX - w / 2, centerY - h / 2, w, h);
+        ctx.stroke();
+        if (progress > 0.3) {
+          ctx.fill();
+        }
+        break;
+      }
+      case 'star': {
+        const starRadius = Math.max(1, 30 * progress);
+        const spikes = 5;
+        const outerRadius = starRadius;
+        const innerRadius = starRadius / 2;
+
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+          const r = i % 2 === 0 ? outerRadius : innerRadius;
+          const angle = (Math.PI / spikes) * i - Math.PI / 2;
+          const x = centerX + Math.cos(angle) * r;
+          const y = centerY + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        if (progress > 0.3) {
+          ctx.fill();
+        }
+        break;
+      }
+    }
+  };
+
+  const createDemoTimeline = () => {
+    const scenario = DEMO_SCENARIOS[indexRef.current];
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        indexRef.current = (indexRef.current + 1) % DEMO_SCENARIOS.length;
+        gsap.delayedCall(2, () => {
+          runDemoCycle(canvasRef, tlRef, indexRef);
+        });
+      },
+    });
+
+    drawBackground();
+
+    const statusTextEl = document.querySelector('.status-text') as HTMLParagraphElement | null;
+    const progressFillEl = document.querySelector('.progress-fill') as HTMLDivElement | null;
+
+    tl.set('.status-icon', { className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura' });
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '准备开始'; });
+    tl.set('.shape-preview', { opacity: 0 });
+    tl.set('.transcript-box', { opacity: 0 });
+    tl.set('.progress-bar', { opacity: 0 });
+    tl.to({}, { duration: 2 });
+
+    tl.to('.status-icon', {
+      className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-macaron-blue-light text-macaron-blue',
+      duration: 0.3,
+    });
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在聆听...'; }, undefined, '<');
+    tl.to('.transcript-box', { opacity: 1, duration: 0.2 });
+
+    const typingDuration = scenario.transcript.length * 120;
+    tl.call(() => {
+      const transcriptEl = document.querySelector('.transcript-text') as HTMLSpanElement | null;
+      if (!transcriptEl) return;
+
+      let index = 0;
+      const text = scenario.transcript;
+      const typeInterval = setInterval(() => {
+        if (index <= text.length) {
+          transcriptEl.textContent = text.substring(0, index);
+          index++;
+          return;
+        }
+        clearInterval(typeInterval);
+      }, 120);
+    });
+
+    tl.to({}, { duration: typingDuration / 1000 + 1 });
+
+    tl.to('.status-icon', {
+      className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-lavender-light text-lavender',
+      duration: 0.3,
+    });
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = 'AI 正在思考'; }, undefined, '<');
+    tl.to('.transcript-box', { opacity: 0, duration: 0.2 }, '<');
+    tl.to('.shape-preview', { opacity: 1, duration: 0.3 });
+    tl.to({}, { duration: 1.2 });
+
+    tl.to('.status-icon', {
+      className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-mint-light text-mint',
+      duration: 0.3,
+    });
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在绘制'; }, undefined, '<');
+    tl.to('.progress-bar', { opacity: 1, duration: 0.2 }, '<');
+
+    tl.to({ progress: 0 }, {
+      progress: 1,
+      duration: 1.5,
+      ease: 'power2.out',
+      onUpdate() {
+        const progress = this.targets()[0].progress;
+        drawShape(scenario, progress);
+        if (progressFillEl) progressFillEl.style.width = `${progress * 100}%`;
+      },
+    });
+
+    tl.to('.status-icon', {
+      className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura',
+      duration: 0.3,
+    }, '+=0.2');
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '绘制完成！'; }, undefined, '<');
+    tl.to('.progress-bar', { opacity: 0, duration: 0.2 }, '<');
+    tl.to('.shape-preview', { opacity: 0, duration: 0.2 }, '<');
+    tl.to({}, { duration: 1 });
+    tl.call(() => drawBackground());
+
+    return tl;
+  };
+
+  tlRef.current = createDemoTimeline();
+};
+
 export default function IdleGuide({ visible }: IdleGuideProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const demoCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -130,209 +311,6 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
       timelineRef.current?.kill();
     };
   }, [visible]);
-
-  // 演示循环函数
-  const runDemoCycle = (
-    canvasRef: React.RefObject<HTMLCanvasElement | null>,
-    tlRef: React.MutableRefObject<gsap.core.Timeline | null>,
-    indexRef: React.MutableRefObject<number>
-  ) => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    // 清空并绘制背景网格
-    const drawBackground = () => {
-      ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = 'rgba(255, 183, 197, 0.08)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < width; i += 20) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, height);
-        ctx.stroke();
-      }
-      for (let i = 0; i < height; i += 20) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(width, i);
-        ctx.stroke();
-      }
-    };
-
-    // 绘制图形函数
-    const drawShape = (scenario: typeof DEMO_SCENARIOS[0], progress: number) => {
-      drawBackground();
-      
-      ctx.strokeStyle = scenario.color;
-      ctx.lineWidth = 2.5;
-      ctx.fillStyle = scenario.color + '30';
-
-      switch (scenario.shape) {
-        case 'circle':
-          const radius = Math.max(1, 35 * progress);
-          ctx.beginPath();
-          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-          ctx.stroke();
-          if (progress > 0.3) {
-            ctx.fill();
-          }
-          break;
-        case 'rectangle':
-          const w = Math.max(1, 70 * progress);
-          const h = Math.max(1, 50 * progress);
-          ctx.beginPath();
-          ctx.rect(centerX - w/2, centerY - h/2, w, h);
-          ctx.stroke();
-          if (progress > 0.3) {
-            ctx.fill();
-          }
-          break;
-        case 'star':
-          const starRadius = Math.max(1, 30 * progress);
-          const spikes = 5;
-          const outerRadius = starRadius;
-          const innerRadius = starRadius / 2;
-          
-          ctx.beginPath();
-          for (let i = 0; i < spikes * 2; i++) {
-            const r = i % 2 === 0 ? outerRadius : innerRadius;
-            const angle = (Math.PI / spikes) * i - Math.PI / 2;
-            const x = centerX + Math.cos(angle) * r;
-            const y = centerY + Math.sin(angle) * r;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.closePath();
-          ctx.stroke();
-          if (progress > 0.3) {
-            ctx.fill();
-          }
-          break;
-      }
-    };
-
-    // 创建演示 timeline
-    const createDemoTimeline = () => {
-      const scenario = DEMO_SCENARIOS[indexRef.current];
-      
-      const tl = gsap.timeline({
-        onComplete: () => {
-          indexRef.current = (indexRef.current + 1) % DEMO_SCENARIOS.length;
-          gsap.delayedCall(2, () => {
-            runDemoCycle(canvasRef, tlRef, indexRef);
-          });
-        },
-      });
-
-      // 初始状态
-      drawBackground();
-
-      // 获取元素引用
-      const statusTextEl = document.querySelector('.status-text') as HTMLParagraphElement;
-      const shapePreviewEl = document.querySelector('.shape-preview') as HTMLDivElement;
-      const transcriptBoxEl = document.querySelector('.transcript-box') as HTMLDivElement;
-      const progressBarEl = document.querySelector('.progress-bar') as HTMLDivElement;
-      const transcriptTextEl = document.querySelector('.transcript-text') as HTMLSpanElement;
-      const progressFillEl = document.querySelector('.progress-fill') as HTMLDivElement;
-      const statusIconEl = document.querySelector('.status-icon') as HTMLDivElement;
-
-      // Step 1: idle - 等待 2秒
-      tl.set('.status-icon', { className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura' });
-      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '准备开始'; });
-      tl.set('.shape-preview', { opacity: 0 });
-      tl.set('.transcript-box', { opacity: 0 });
-      tl.set('.progress-bar', { opacity: 0 });
-      tl.to({}, { duration: 2 });
-
-      // Step 2: listening - 语音识别
-      tl.to('.status-icon', {
-        className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-macaron-blue-light text-macaron-blue',
-        duration: 0.3,
-      });
-      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在聆听...'; }, undefined, '<');
-      
-      // 显示文字逐字出现
-      tl.to('.transcript-box', { opacity: 1, duration: 0.2 });
-      
-      // 计算打字所需时间，然后等待完成
-      const typingDuration = scenario.transcript.length * 120; // 每个字 120ms
-      tl.call(() => {
-        const transcriptEl = document.querySelector('.transcript-text') as HTMLSpanElement;
-        if (transcriptEl) {
-          let index = 0;
-          const text = scenario.transcript;
-          const typeInterval = setInterval(() => {
-            if (index <= text.length) {
-              transcriptEl.textContent = text.substring(0, index);
-              index++;
-            } else {
-              clearInterval(typeInterval);
-            }
-          }, 120);
-        }
-      });
-      
-      // 等待打字完成 + 额外停顿 1 秒
-      tl.to({}, { duration: typingDuration / 1000 + 1 });
-
-      // Step 3: thinking - AI思考
-      tl.to('.status-icon', {
-        className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-lavender-light text-lavender',
-        duration: 0.3,
-      });
-      tl.call(() => { if (statusTextEl) statusTextEl.textContent = 'AI 正在思考'; }, undefined, '<');
-      tl.to('.transcript-box', { opacity: 0, duration: 0.2 }, '<');
-      
-      // 显示形状预览
-      tl.to('.shape-preview', { opacity: 1, duration: 0.3 });
-      tl.to({}, { duration: 1.2 });
-
-      // Step 4: drawing - 绘制
-      tl.to('.status-icon', {
-        className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-mint-light text-mint',
-        duration: 0.3,
-      });
-      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在绘制'; }, undefined, '<');
-      tl.to('.progress-bar', { opacity: 1, duration: 0.2 }, '<');
-
-      // 绘制动画
-      tl.to({ progress: 0 }, {
-        progress: 1,
-        duration: 1.5,
-        ease: 'power2.out',
-        onUpdate: function() {
-          const progress = this.targets()[0].progress;
-          drawShape(scenario, progress);
-          if (progressFillEl) progressFillEl.style.width = `${progress * 100}%`;
-        },
-      });
-
-      // Step 5: complete - 完成
-      tl.to('.status-icon', {
-        className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura',
-        duration: 0.3,
-      }, '+=0.2');
-      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '绘制完成！'; }, undefined, '<');
-      tl.to('.progress-bar', { opacity: 0, duration: 0.2 }, '<');
-      tl.to('.shape-preview', { opacity: 0, duration: 0.2 }, '<');
-      tl.to({}, { duration: 1 });
-
-      // 清空画布
-      tl.call(() => drawBackground());
-
-      return tl;
-    };
-
-    tlRef.current = createDemoTimeline();
-  };
 
   if (!visible) return null;
 

@@ -235,9 +235,18 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
       // 初始状态
       drawBackground();
 
+      // 获取元素引用
+      const statusTextEl = document.querySelector('.status-text') as HTMLParagraphElement;
+      const shapePreviewEl = document.querySelector('.shape-preview') as HTMLDivElement;
+      const transcriptBoxEl = document.querySelector('.transcript-box') as HTMLDivElement;
+      const progressBarEl = document.querySelector('.progress-bar') as HTMLDivElement;
+      const transcriptTextEl = document.querySelector('.transcript-text') as HTMLSpanElement;
+      const progressFillEl = document.querySelector('.progress-fill') as HTMLDivElement;
+      const statusIconEl = document.querySelector('.status-icon') as HTMLDivElement;
+
       // Step 1: idle - 等待 2秒
       tl.set('.status-icon', { className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura' });
-      tl.set('.status-text', { text: '准备开始' });
+      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '准备开始'; });
       tl.set('.shape-preview', { opacity: 0 });
       tl.set('.transcript-box', { opacity: 0 });
       tl.set('.progress-bar', { opacity: 0 });
@@ -248,22 +257,38 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
         className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-macaron-blue-light text-macaron-blue',
         duration: 0.3,
       });
-      tl.to('.status-text', { text: '正在聆听...', duration: 0.2 }, '<');
+      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在聆听...'; }, undefined, '<');
       
       // 显示文字逐字出现
       tl.to('.transcript-box', { opacity: 1, duration: 0.2 });
-      tl.to('.transcript-text', {
-        text: scenario.transcript,
-        duration: scenario.transcript.length * 0.06,
-        ease: 'none',
+      
+      // 计算打字所需时间，然后等待完成
+      const typingDuration = scenario.transcript.length * 120; // 每个字 120ms
+      tl.call(() => {
+        const transcriptEl = document.querySelector('.transcript-text') as HTMLSpanElement;
+        if (transcriptEl) {
+          let index = 0;
+          const text = scenario.transcript;
+          const typeInterval = setInterval(() => {
+            if (index <= text.length) {
+              transcriptEl.textContent = text.substring(0, index);
+              index++;
+            } else {
+              clearInterval(typeInterval);
+            }
+          }, 120);
+        }
       });
+      
+      // 等待打字完成 + 额外停顿 1 秒
+      tl.to({}, { duration: typingDuration / 1000 + 1 });
 
       // Step 3: thinking - AI思考
       tl.to('.status-icon', {
         className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-lavender-light text-lavender',
         duration: 0.3,
-      }, '+=0.3');
-      tl.to('.status-text', { text: 'AI 正在思考', duration: 0.2 }, '<');
+      });
+      tl.call(() => { if (statusTextEl) statusTextEl.textContent = 'AI 正在思考'; }, undefined, '<');
       tl.to('.transcript-box', { opacity: 0, duration: 0.2 }, '<');
       
       // 显示形状预览
@@ -275,7 +300,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
         className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-mint-light text-mint',
         duration: 0.3,
       });
-      tl.to('.status-text', { text: '正在绘制', duration: 0.2 }, '<');
+      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在绘制'; }, undefined, '<');
       tl.to('.progress-bar', { opacity: 1, duration: 0.2 }, '<');
 
       // 绘制动画
@@ -286,7 +311,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
         onUpdate: function() {
           const progress = this.targets()[0].progress;
           drawShape(scenario, progress);
-          gsap.set('.progress-fill', { width: `${progress * 100}%` });
+          if (progressFillEl) progressFillEl.style.width = `${progress * 100}%`;
         },
       });
 
@@ -295,7 +320,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
         className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura',
         duration: 0.3,
       }, '+=0.2');
-      tl.to('.status-text', { text: '绘制完成！', duration: 0.2 }, '<');
+      tl.call(() => { if (statusTextEl) statusTextEl.textContent = '绘制完成！'; }, undefined, '<');
       tl.to('.progress-bar', { opacity: 0, duration: 0.2 }, '<');
       tl.to('.shape-preview', { opacity: 0, duration: 0.2 }, '<');
       tl.to({}, { duration: 1 });

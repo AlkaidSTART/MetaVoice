@@ -9,7 +9,7 @@
  * 纯函数 + 类型，与 React 解耦：渲染层只关心 state.shapes，不关心 op 来源。
  */
 
-import type { DrawInstruction, Shape } from "./draw-schema";
+import type { DrawInstruction, Shape, Segment } from "./draw-schema";
 
 /** 画布完整状态：元素列表 + 全局氛围（背景/暗角） */
 export interface CanvasState {
@@ -183,11 +183,11 @@ export function moveShapesByIds(state: CanvasState, ids: string[], dx: number, d
       if (shape.x2 != null) next.x2 = shape.x2 + dx;
       if (shape.y2 != null) next.y2 = shape.y2 + dy;
       if (shape.points) {
-        next.points = shape.points.map((value, index) => value + (index % 2 === 0 ? dx : dy));
+        next.points = shape.points.map((value: number, index: number) => value + (index % 2 === 0 ? dx : dy));
       }
       // path 的 segments 控制点也需跟随平移，否则移动 path 会变形
       if (shape.segments) {
-        next.segments = shape.segments.map((seg) => {
+        next.segments = shape.segments.map((seg: Segment) => {
           const moved = { ...seg };
           if (seg.x != null) moved.x = seg.x + dx;
           if (seg.y != null) moved.y = seg.y + dy;
@@ -222,7 +222,7 @@ export function warmShapesByIds(state: CanvasState, ids: string[], amount: numbe
         gradient: shape.gradient
           ? {
               ...shape.gradient,
-              stops: shape.gradient.stops.map((stop) => ({
+              stops: (shape.gradient.stops as { offset: number; color: string }[]).map((stop) => ({
                 ...stop,
                 color: mapHexColor(stop.color, (r, g, b) => [r + amount, g + amount / 3, b - amount / 3]),
               })),
@@ -251,7 +251,7 @@ export function coolShapesByIds(state: CanvasState, ids: string[], amount: numbe
         gradient: shape.gradient
           ? {
               ...shape.gradient,
-              stops: shape.gradient.stops.map((stop) => ({
+              stops: (shape.gradient.stops as { offset: number; color: string }[]).map((stop) => ({
                 ...stop,
                 color: mapHexColor(stop.color, (r, g, b) => [r - amount / 3, g + amount / 4, b + amount]),
               })),

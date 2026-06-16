@@ -12,10 +12,10 @@
 export {
   drawInstructionSchema,
   shapeSchema,
-} from "../../../lib/draw-schema";
+} from "../../lib/draw-schema";
 export type {
   Shape,
   DrawInstruction,
   Segment,
   SketchStyle,
-} from "../../../lib/draw-schema";
+} from "../../lib/draw-schema";

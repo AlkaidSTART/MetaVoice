@@ -581,7 +581,7 @@ export default function CanvasPage() {
     // sketch 手绘风格：对任意几何形状（circle/rect/path/...）叠加种子化抖动 +
     // 线宽脉动描边，让画面「像人类自然画图」而非笔直线条拼凑。
     // 文字不做 sketch（避免不可读）；sketch.roughness=0 等价关闭。
-    if (shape.sketch && shape.type !== 'text') {
+    if (shape.sketch) {
       const { points: outline, closed } = flattenShapeOutline(shape, toTopLeft);
       if (outline.length >= 2) {
         const { points: jittered, widthScale } = applySketchJitter(outline, shape.sketch);
@@ -1156,13 +1156,13 @@ export default function CanvasPage() {
 
     // 按 z（图层）升序排序；同 z 保持原数组顺序
     const ordered = instructions.shapes
-      .map((s, idx) => ({ s, idx }))
-      .sort((a, b) => {
+      .map((s: Shape, idx: number) => ({ s, idx }))
+      .sort((a: { s: Shape; idx: number }, b: { s: Shape; idx: number }) => {
         const za = a.s.z ?? 0;
         const zb = b.s.z ?? 0;
         return za - zb || a.idx - b.idx;
       })
-      .map((x) => x.s);
+      .map((x: { s: Shape; idx: number }) => x.s);
 
     const prefersReduced =
       typeof window !== 'undefined' &&

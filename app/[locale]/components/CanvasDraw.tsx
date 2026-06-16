@@ -123,7 +123,7 @@ export default function CanvasDraw({ instruction }: CanvasDrawProps) {
     // 绘制形状
     if (instruction?.shapes && instruction.shapes.length > 0) {
       // 使用GSAP动画绘制每个形状
-      instruction.shapes.forEach((shape, index) => {
+      instruction.shapes.forEach((shape: DrawInstruction["shapes"][0], index: number) => {
         gsap.fromTo(
           canvas,
           {

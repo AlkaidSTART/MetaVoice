@@ -62,26 +62,29 @@ export const DRAW_RULES_PROMPT = `【anchor 语义】
 3. 按 z 值规划图层：背景元素（天空、草地）z=0，主体 z=1，前景装饰 z=2+。
 4. 同一物体用多个 shape 组合时，让它们的坐标/尺寸真实拼接（例如屋顶三角形的底边要落在墙体矩形顶部）。
 5. 半透明效果（云、阴影、水面反光）必须用 opacity 字段，取值 0.5-0.9。
-6. 只输出要求的结构，不要 markdown 代码块、不要解释文字、不要前后缀。`;
+6. 画面要面向儿童：温暖、明亮、可爱、清晰，优先使用圆润形体、简单表情、童趣自然物、家庭友好场景。
+7. 画面必须合理：物体之间要符合常识和空间关系，例如房子在地面上、树长在草地上、太阳在天空、鱼在水里、人物/动物比例不要夸张失控。
+8. 不要生成诡异、恐怖、阴森、畸形、肢体错乱、漂浮断裂、密集眼睛、尖牙、血迹、怪物化儿童/动物、成人化或不适合儿童的元素。
+9. 如果用户描述本身偏恐怖、怪异或不适合儿童，请转译为安全童趣版本，例如“怪物”画成友好的毛绒小怪兽，“黑暗森林”画成月光下安静的小树林。
+10. 只输出要求的结构，不要 markdown 代码块、不要解释文字、不要前后缀。`;
 
-export const DRAW_EXAMPLES_PROMPT = `【参考示例 1：单元素】
-用户要"画一个红色圆形"，输出：
-{"shapes":[{"type":"circle","x":480,"y":360,"anchor":"center","z":0,"radius":120,"fillColor":"#E53935"}],"backgroundColor":"#FFFFFF"}
+export const DRAW_EXAMPLES_PROMPT = `【参考示例 1：儿童友好单元素】
+用户要"画一个红色圆形"，输出一个像贴纸一样温和明亮的圆：
+{"shapes":[{"type":"circle","x":480,"y":360,"anchor":"center","z":0,"radius":120,"fillColor":"#FF8A80","strokeColor":"#E57373","strokeWidth":4}],"backgroundColor":"#FFFFFF"}
 
-【参考示例 2：多元素场景（蓝天白云下的小房子，旁边有树，太阳在右上角）】
+【参考示例 2：儿童友好多元素场景（蓝天白云下的小房子，旁边有树，太阳在右上角）】
 {
-  "backgroundColor": "#87CEEB",
+  "backgroundColor": "#E3F2FD",
   "shapes": [
-    {"type":"rectangle","x":0,"y":500,"anchor":"top-left","z":0,"width":960,"height":220,"fillColor":"#7CB342"},
-    {"type":"circle","x":820,"y":120,"anchor":"center","z":1,"radius":55,"fillColor":"#FFEB3B"},
-    {"type":"rectangle","x":360,"y":400,"anchor":"top-left","z":1,"width":240,"height":150,"fillColor":"#F5DEB3","strokeColor":"#8D6E63","strokeWidth":3},
-    {"type":"polygon","x":360,"y":400,"anchor":"top-left","z":2,"points":[360,400,480,300,600,400],"fillColor":"#8D6E63"},
+    {"type":"rectangle","x":0,"y":500,"anchor":"top-left","z":0,"width":960,"height":220,"fillColor":"#A5D6A7"},
+    {"type":"circle","x":820,"y":120,"anchor":"center","z":1,"radius":55,"fillColor":"#FFD54F","strokeColor":"#FFB300","strokeWidth":3},
+    {"type":"rectangle","x":360,"y":400,"anchor":"top-left","z":1,"width":240,"height":150,"fillColor":"#FFE0B2","strokeColor":"#A1887F","strokeWidth":3},
+    {"type":"polygon","x":360,"y":400,"anchor":"top-left","z":2,"points":[360,400,480,300,600,400],"fillColor":"#EF9A9A","strokeColor":"#D87A7A","strokeWidth":3},
     {"type":"rectangle","x":450,"y":470,"anchor":"top-left","z":2,"width":60,"height":80,"fillColor":"#5D4037"},
     {"type":"rectangle","x":380,"y":430,"anchor":"top-left","z":2,"width":50,"height":50,"fillColor":"#81D4FA","strokeColor":"#FFFFFF","strokeWidth":2},
     {"type":"rectangle","x":200,"y":430,"anchor":"top-left","z":1,"width":28,"height":120,"fillColor":"#6D4C41"},
-    {"type":"circle","x":214,"y":400,"anchor":"center","z":1,"radius":80,"fillColor":"#4CAF50"},
+    {"type":"circle","x":214,"y":400,"anchor":"center","z":1,"radius":80,"fillColor":"#66BB6A","sketch":{"roughness":0.5,"seed":12,"wobble":0.4}},
     {"type":"ellipse","x":600,"y":180,"anchor":"center","z":2,"rx":70,"ry":32,"fillColor":"#FFFFFF","opacity":0.9},
     {"type":"ellipse","x":660,"y":195,"anchor":"center","z":2,"rx":55,"ry":28,"fillColor":"#FFFFFF","opacity":0.9}
   ]
 }`;
-

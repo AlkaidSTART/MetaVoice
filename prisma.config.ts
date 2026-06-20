@@ -1,10 +1,13 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
+
+// 加载 .env.local 文件
+config({ path: ".env.local" });
 
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not set");
+  throw new Error("DATABASE_URL is not set in .env.local");
 }
 
 export default defineConfig({

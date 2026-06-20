@@ -35,6 +35,7 @@ import {
   generateImage,
   processWithAgent,
 } from "@/lib/api/voice";
+import { sendEmail } from "@/lib/api/email";
 import { createClient } from "@/lib/supabase/client";
 import { saveArtwork, downloadDataUrl } from "@/lib/db/artworkStore";
 
@@ -377,6 +378,36 @@ function CanvasContent() {
         });
         // 自动下载
         downloadDataUrl(dataUrl, `${artworkTitle || "voicecanvas"}.png`);
+
+        // 自动发送邮件
+        if (user?.email) {
+          addToast("正在发送邮件...", "info");
+          const emailResult = await sendEmail({
+            toEmail: user.email,
+            subject: `VoiceCanvas - 您的作品 "${artworkTitle}" 已生成`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #1A1A1A; margin-bottom: 16px;">您的作品已生成！</h2>
+                <p style="color: #6B6B6B; margin-bottom: 16px;">
+                  感谢使用 VoiceCanvas！您刚刚创作的作品 "${artworkTitle}" 已成功生成。
+                </p>
+                <p style="color: #6B6B6B; margin-bottom: 20px;">
+                  您可以在作品库中查看和管理所有作品。
+                </p>
+                <div style="border-top: 1px solid #E8E8E4; padding-top: 16px; text-align: center;">
+                  <span style="color: #AEAEAE; font-size: 12px;">VoiceCanvas - 纯语音驱动绘图工具</span>
+                </div>
+              </div>
+            `,
+            imageDataUrl: dataUrl,
+          });
+
+          if (emailResult.success) {
+            addToast(`图片已发送至 ${user.email}`, "success");
+          } else {
+            addToast("邮件发送失败", "warning");
+          }
+        }
       }
 
       // 同时保存到 Supabase
@@ -388,7 +419,7 @@ function CanvasContent() {
         origin: { y: 0.7 },
       });
 
-      addToast("高级图片已生成并保存到本地", "success");
+      addToast("高级图片已生成并保存", "success");
     } catch (error) {
       console.error(error);
       addToast("高级图片生成失败", "error");

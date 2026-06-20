@@ -42,3 +42,17 @@ model Artwork {
   @@index([createdAt])
   @@map("artworks")
 }
+
+// Email logs for image delivery
+model EmailLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  toEmail      String   @map("to_email")
+  subject      String
+  html         String
+  imageDataUrl String?  @map("image_data_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("email_logs")
+}

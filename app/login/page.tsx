@@ -192,7 +192,7 @@ export default function LoginPage() {
       <div className="text-center mb-8 max-w-lg z-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FFEAEF] text-sakura border border-[#FFD5DE] rounded-full text-xs font-semibold mb-4 animate-pulse">
           <Sparkles className="w-3.5 h-3.5 text-[#E07A8F]" />
-          <span className="text-[#B3455C]">七牛云黑客松 MVP 创意作品</span>
+          <span className="text-[#B3455C]">儿童激发创意一体化方案</span>
         </div>
         <h1
           ref={titleRef}

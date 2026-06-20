@@ -141,6 +141,16 @@ exports.Prisma.ArtworkScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.EmailLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  toEmail: 'toEmail',
+  subject: 'subject',
+  html: 'html',
+  imageDataUrl: 'imageDataUrl',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -159,7 +169,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   Profile: 'Profile',
-  Artwork: 'Artwork'
+  Artwork: 'Artwork',
+  EmailLog: 'EmailLog'
 };
 
 /**

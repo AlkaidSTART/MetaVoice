@@ -124,9 +124,11 @@ export async function uploadBufferToStorage(params: {
   let publicUrl: string;
   if (bucketType === "public") {
     const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    if (!data) throw new Error("Failed to get public URL");
     publicUrl = data.publicUrl;
   } else {
     const { data } = await supabase.storage.from(bucketName).createSignedUrl(fileName, 60 * 60 * 24 * 7);
+    if (!data) throw new Error("Failed to create signed URL");
     publicUrl = data.signedUrl;
   }
 

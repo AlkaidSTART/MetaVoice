@@ -23,23 +23,32 @@ model Profile {
   @@map("profiles")
 }
 
+// Bucket type enum
+enum BucketType {
+  PUBLIC    @map("public-bucket")
+  PRIVATE   @map("private-bucket")
+}
+
 // Artwork model
 model Artwork {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  title        String    @default("未命名画作")
-  canvasJson   String?   @map("canvas_json")
-  thumbnailUrl String?   @map("thumbnail_url")
-  tags         String[]  @default([])
-  isPublic     Boolean   @default(true) @map("is_public")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id           String     @id @default(uuid())
+  userId       String     @map("user_id")
+  title        String     @default("未命名画作")
+  canvasJson   String?    @map("canvas_json")
+  thumbnailUrl String?    @map("thumbnail_url")
+  bucket       BucketType @default(PUBLIC)
+  fileKey      String?    @map("file_key")
+  tags         String[]   @default([])
+  isPublic     Boolean    @default(true) @map("is_public")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([isPublic])
   @@index([userId])
   @@index([createdAt])
+  @@index([bucket])
   @@map("artworks")
 }
 

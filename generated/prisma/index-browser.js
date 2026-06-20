@@ -135,6 +135,8 @@ exports.Prisma.ArtworkScalarFieldEnum = {
   title: 'title',
   canvasJson: 'canvasJson',
   thumbnailUrl: 'thumbnailUrl',
+  bucket: 'bucket',
+  fileKey: 'fileKey',
   tags: 'tags',
   isPublic: 'isPublic',
   createdAt: 'createdAt',
@@ -165,7 +167,10 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
-
+exports.BucketType = exports.$Enums.BucketType = {
+  PUBLIC: 'PUBLIC',
+  PRIVATE: 'PRIVATE'
+};
 
 exports.Prisma.ModelName = {
   Profile: 'Profile',

@@ -30,6 +30,23 @@ export type Artwork = $Result.DefaultSelection<Prisma.$ArtworkPayload>
 export type EmailLog = $Result.DefaultSelection<Prisma.$EmailLogPayload>
 
 /**
+ * Enums
+ */
+export namespace $Enums {
+  export const BucketType: {
+  PUBLIC: 'PUBLIC',
+  PRIVATE: 'PRIVATE'
+};
+
+export type BucketType = (typeof BucketType)[keyof typeof BucketType]
+
+}
+
+export type BucketType = $Enums.BucketType
+
+export const BucketType: typeof $Enums.BucketType
+
+/**
  * ##  Prisma Client ʲˢ
  *
  * Type-safe database client for TypeScript & Node.js
@@ -2216,6 +2233,8 @@ export namespace Prisma {
     title: string | null
     canvasJson: string | null
     thumbnailUrl: string | null
+    bucket: $Enums.BucketType | null
+    fileKey: string | null
     isPublic: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -2227,6 +2246,8 @@ export namespace Prisma {
     title: string | null
     canvasJson: string | null
     thumbnailUrl: string | null
+    bucket: $Enums.BucketType | null
+    fileKey: string | null
     isPublic: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -2238,6 +2259,8 @@ export namespace Prisma {
     title: number
     canvasJson: number
     thumbnailUrl: number
+    bucket: number
+    fileKey: number
     tags: number
     isPublic: number
     createdAt: number
@@ -2252,6 +2275,8 @@ export namespace Prisma {
     title?: true
     canvasJson?: true
     thumbnailUrl?: true
+    bucket?: true
+    fileKey?: true
     isPublic?: true
     createdAt?: true
     updatedAt?: true
@@ -2263,6 +2288,8 @@ export namespace Prisma {
     title?: true
     canvasJson?: true
     thumbnailUrl?: true
+    bucket?: true
+    fileKey?: true
     isPublic?: true
     createdAt?: true
     updatedAt?: true
@@ -2274,6 +2301,8 @@ export namespace Prisma {
     title?: true
     canvasJson?: true
     thumbnailUrl?: true
+    bucket?: true
+    fileKey?: true
     tags?: true
     isPublic?: true
     createdAt?: true
@@ -2359,6 +2388,8 @@ export namespace Prisma {
     title: string
     canvasJson: string | null
     thumbnailUrl: string | null
+    bucket: $Enums.BucketType
+    fileKey: string | null
     tags: string[]
     isPublic: boolean
     createdAt: Date
@@ -2388,6 +2419,8 @@ export namespace Prisma {
     title?: boolean
     canvasJson?: boolean
     thumbnailUrl?: boolean
+    bucket?: boolean
+    fileKey?: boolean
     tags?: boolean
     isPublic?: boolean
     createdAt?: boolean
@@ -2401,6 +2434,8 @@ export namespace Prisma {
     title?: boolean
     canvasJson?: boolean
     thumbnailUrl?: boolean
+    bucket?: boolean
+    fileKey?: boolean
     tags?: boolean
     isPublic?: boolean
     createdAt?: boolean
@@ -2414,6 +2449,8 @@ export namespace Prisma {
     title?: boolean
     canvasJson?: boolean
     thumbnailUrl?: boolean
+    bucket?: boolean
+    fileKey?: boolean
     tags?: boolean
     isPublic?: boolean
     createdAt?: boolean
@@ -2427,13 +2464,15 @@ export namespace Prisma {
     title?: boolean
     canvasJson?: boolean
     thumbnailUrl?: boolean
+    bucket?: boolean
+    fileKey?: boolean
     tags?: boolean
     isPublic?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type ArtworkOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "title" | "canvasJson" | "thumbnailUrl" | "tags" | "isPublic" | "createdAt" | "updatedAt", ExtArgs["result"]["artwork"]>
+  export type ArtworkOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "title" | "canvasJson" | "thumbnailUrl" | "bucket" | "fileKey" | "tags" | "isPublic" | "createdAt" | "updatedAt", ExtArgs["result"]["artwork"]>
   export type ArtworkInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     profile?: boolean | ProfileDefaultArgs<ExtArgs>
   }
@@ -2455,6 +2494,8 @@ export namespace Prisma {
       title: string
       canvasJson: string | null
       thumbnailUrl: string | null
+      bucket: $Enums.BucketType
+      fileKey: string | null
       tags: string[]
       isPublic: boolean
       createdAt: Date
@@ -2888,6 +2929,8 @@ export namespace Prisma {
     readonly title: FieldRef<"Artwork", 'String'>
     readonly canvasJson: FieldRef<"Artwork", 'String'>
     readonly thumbnailUrl: FieldRef<"Artwork", 'String'>
+    readonly bucket: FieldRef<"Artwork", 'BucketType'>
+    readonly fileKey: FieldRef<"Artwork", 'String'>
     readonly tags: FieldRef<"Artwork", 'String[]'>
     readonly isPublic: FieldRef<"Artwork", 'Boolean'>
     readonly createdAt: FieldRef<"Artwork", 'DateTime'>
@@ -4369,6 +4412,8 @@ export namespace Prisma {
     title: 'title',
     canvasJson: 'canvasJson',
     thumbnailUrl: 'thumbnailUrl',
+    bucket: 'bucket',
+    fileKey: 'fileKey',
     tags: 'tags',
     isPublic: 'isPublic',
     createdAt: 'createdAt',
@@ -4459,6 +4504,20 @@ export namespace Prisma {
    * Reference to a field of type 'DateTime[]'
    */
   export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'BucketType'
+   */
+  export type EnumBucketTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BucketType'>
+    
+
+
+  /**
+   * Reference to a field of type 'BucketType[]'
+   */
+  export type ListEnumBucketTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BucketType[]'>
     
 
 
@@ -4557,6 +4616,8 @@ export namespace Prisma {
     title?: StringFilter<"Artwork"> | string
     canvasJson?: StringNullableFilter<"Artwork"> | string | null
     thumbnailUrl?: StringNullableFilter<"Artwork"> | string | null
+    bucket?: EnumBucketTypeFilter<"Artwork"> | $Enums.BucketType
+    fileKey?: StringNullableFilter<"Artwork"> | string | null
     tags?: StringNullableListFilter<"Artwork">
     isPublic?: BoolFilter<"Artwork"> | boolean
     createdAt?: DateTimeFilter<"Artwork"> | Date | string
@@ -4570,6 +4631,8 @@ export namespace Prisma {
     title?: SortOrder
     canvasJson?: SortOrderInput | SortOrder
     thumbnailUrl?: SortOrderInput | SortOrder
+    bucket?: SortOrder
+    fileKey?: SortOrderInput | SortOrder
     tags?: SortOrder
     isPublic?: SortOrder
     createdAt?: SortOrder
@@ -4586,6 +4649,8 @@ export namespace Prisma {
     title?: StringFilter<"Artwork"> | string
     canvasJson?: StringNullableFilter<"Artwork"> | string | null
     thumbnailUrl?: StringNullableFilter<"Artwork"> | string | null
+    bucket?: EnumBucketTypeFilter<"Artwork"> | $Enums.BucketType
+    fileKey?: StringNullableFilter<"Artwork"> | string | null
     tags?: StringNullableListFilter<"Artwork">
     isPublic?: BoolFilter<"Artwork"> | boolean
     createdAt?: DateTimeFilter<"Artwork"> | Date | string
@@ -4599,6 +4664,8 @@ export namespace Prisma {
     title?: SortOrder
     canvasJson?: SortOrderInput | SortOrder
     thumbnailUrl?: SortOrderInput | SortOrder
+    bucket?: SortOrder
+    fileKey?: SortOrderInput | SortOrder
     tags?: SortOrder
     isPublic?: SortOrder
     createdAt?: SortOrder
@@ -4617,6 +4684,8 @@ export namespace Prisma {
     title?: StringWithAggregatesFilter<"Artwork"> | string
     canvasJson?: StringNullableWithAggregatesFilter<"Artwork"> | string | null
     thumbnailUrl?: StringNullableWithAggregatesFilter<"Artwork"> | string | null
+    bucket?: EnumBucketTypeWithAggregatesFilter<"Artwork"> | $Enums.BucketType
+    fileKey?: StringNullableWithAggregatesFilter<"Artwork"> | string | null
     tags?: StringNullableListFilter<"Artwork">
     isPublic?: BoolWithAggregatesFilter<"Artwork"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"Artwork"> | Date | string
@@ -4757,6 +4826,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -4770,6 +4841,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -4781,6 +4854,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -4794,6 +4869,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -4806,6 +4883,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -4817,6 +4896,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -4829,6 +4910,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5073,6 +5156,13 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
+  export type EnumBucketTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.BucketType | EnumBucketTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBucketTypeFilter<$PrismaModel> | $Enums.BucketType
+  }
+
   export type StringNullableListFilter<$PrismaModel = never> = {
     equals?: string[] | ListStringFieldRefInput<$PrismaModel> | null
     has?: string | StringFieldRefInput<$PrismaModel> | null
@@ -5097,6 +5187,8 @@ export namespace Prisma {
     title?: SortOrder
     canvasJson?: SortOrder
     thumbnailUrl?: SortOrder
+    bucket?: SortOrder
+    fileKey?: SortOrder
     tags?: SortOrder
     isPublic?: SortOrder
     createdAt?: SortOrder
@@ -5109,6 +5201,8 @@ export namespace Prisma {
     title?: SortOrder
     canvasJson?: SortOrder
     thumbnailUrl?: SortOrder
+    bucket?: SortOrder
+    fileKey?: SortOrder
     isPublic?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -5120,9 +5214,21 @@ export namespace Prisma {
     title?: SortOrder
     canvasJson?: SortOrder
     thumbnailUrl?: SortOrder
+    bucket?: SortOrder
+    fileKey?: SortOrder
     isPublic?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type EnumBucketTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BucketType | EnumBucketTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBucketTypeWithAggregatesFilter<$PrismaModel> | $Enums.BucketType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBucketTypeFilter<$PrismaModel>
+    _max?: NestedEnumBucketTypeFilter<$PrismaModel>
   }
 
   export type BoolWithAggregatesFilter<$PrismaModel = never> = {
@@ -5233,6 +5339,10 @@ export namespace Prisma {
     create?: XOR<ProfileCreateWithoutArtworksInput, ProfileUncheckedCreateWithoutArtworksInput>
     connectOrCreate?: ProfileCreateOrConnectWithoutArtworksInput
     connect?: ProfileWhereUniqueInput
+  }
+
+  export type EnumBucketTypeFieldUpdateOperationsInput = {
+    set?: $Enums.BucketType
   }
 
   export type ArtworkUpdatetagsInput = {
@@ -5388,9 +5498,26 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
+  export type NestedEnumBucketTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.BucketType | EnumBucketTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBucketTypeFilter<$PrismaModel> | $Enums.BucketType
+  }
+
   export type NestedBoolFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel>
     not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
+  export type NestedEnumBucketTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BucketType | EnumBucketTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BucketType[] | ListEnumBucketTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBucketTypeWithAggregatesFilter<$PrismaModel> | $Enums.BucketType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBucketTypeFilter<$PrismaModel>
+    _max?: NestedEnumBucketTypeFilter<$PrismaModel>
   }
 
   export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
@@ -5406,6 +5533,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -5417,6 +5546,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -5458,6 +5589,8 @@ export namespace Prisma {
     title?: StringFilter<"Artwork"> | string
     canvasJson?: StringNullableFilter<"Artwork"> | string | null
     thumbnailUrl?: StringNullableFilter<"Artwork"> | string | null
+    bucket?: EnumBucketTypeFilter<"Artwork"> | $Enums.BucketType
+    fileKey?: StringNullableFilter<"Artwork"> | string | null
     tags?: StringNullableListFilter<"Artwork">
     isPublic?: BoolFilter<"Artwork"> | boolean
     createdAt?: DateTimeFilter<"Artwork"> | Date | string
@@ -5521,6 +5654,8 @@ export namespace Prisma {
     title?: string
     canvasJson?: string | null
     thumbnailUrl?: string | null
+    bucket?: $Enums.BucketType
+    fileKey?: string | null
     tags?: ArtworkCreatetagsInput | string[]
     isPublic?: boolean
     createdAt?: Date | string
@@ -5532,6 +5667,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5543,6 +5680,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5554,6 +5693,8 @@ export namespace Prisma {
     title?: StringFieldUpdateOperationsInput | string
     canvasJson?: NullableStringFieldUpdateOperationsInput | string | null
     thumbnailUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    bucket?: EnumBucketTypeFieldUpdateOperationsInput | $Enums.BucketType
+    fileKey?: NullableStringFieldUpdateOperationsInput | string | null
     tags?: ArtworkUpdatetagsInput | string[]
     isPublic?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string

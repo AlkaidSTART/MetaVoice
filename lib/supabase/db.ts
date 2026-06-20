@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma/client";
-import type { Artwork as PrismaArtwork, Prisma } from "@/generated/prisma";
+import { createAdminClient } from "./admin";
 import { uploadThumbnail } from "./storage";
 
 export type ArtworkRecord = {
@@ -25,57 +24,41 @@ export type ProfileRecord = {
   updated_at: string;
 };
 
-type ArtworkWithProfile = Prisma.ArtworkGetPayload<{
-  include: {
-    profile: {
-      select: { name: true; avatarUrl: true };
-    };
-  };
-}>;
-
-function toArtworkRecord(
-  art: PrismaArtwork | ArtworkWithProfile,
-): ArtworkRecord {
-  const profile = "profile" in art ? art.profile : undefined;
-
-  return {
-    id: art.id,
-    user_id: art.userId,
-    title: art.title,
-    canvas_json: art.canvasJson,
-    thumbnail_url: art.thumbnailUrl,
-    tags: art.tags,
-    is_public: art.isPublic,
-    created_at: art.createdAt.toISOString(),
-    updated_at: art.updatedAt.toISOString(),
-    user_name: profile?.name || undefined,
-    user_avatar_url: profile?.avatarUrl || undefined,
-  };
-}
-
 /**
  * Fetch public artworks for the Square (community gallery).
  * Ordered by newest first.
  */
 export async function getPublicArtworks(): Promise<ArtworkRecord[]> {
   try {
-    const artworks = await prisma.artwork.findMany({
-      where: { isPublic: true },
-      orderBy: { createdAt: "desc" },
-      include: {
-        profile: {
-          select: { name: true, avatarUrl: true },
-        },
-      },
-    });
+    const supabase = createAdminClient();
+    
+    const { data: artworks, error } = await supabase
+      .from("artworks")
+      .select(`
+        *,
+        profile:profiles(id, name, avatar_url)
+      `)
+      .eq("is_public", true)
+      .order("created_at", { ascending: false });
 
-    return artworks.map((art: ArtworkWithProfile) => {
-      const record = toArtworkRecord(art);
-      return {
-        ...record,
-        user_name: record.user_name || "匿名用户",
-      };
-    });
+    if (error) {
+      console.error("Error fetching public artworks:", error);
+      return [];
+    }
+
+    return artworks.map((art: any) => ({
+      id: art.id,
+      user_id: art.user_id,
+      title: art.title,
+      canvas_json: art.canvas_json,
+      thumbnail_url: art.thumbnail_url,
+      tags: art.tags || [],
+      is_public: art.is_public,
+      created_at: art.created_at,
+      updated_at: art.updated_at,
+      user_name: art.profile?.name || "匿名用户",
+      user_avatar_url: art.profile?.avatar_url,
+    }));
   } catch (error) {
     console.error("Error fetching public artworks:", error);
     return [];
@@ -89,12 +72,30 @@ export async function getUserArtworks(
   userId: string,
 ): Promise<ArtworkRecord[]> {
   try {
-    const artworks = await prisma.artwork.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-    });
+    const supabase = createAdminClient();
+    
+    const { data: artworks, error } = await supabase
+      .from("artworks")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
 
-    return artworks.map(toArtworkRecord);
+    if (error) {
+      console.error("Error fetching user artworks:", error);
+      return [];
+    }
+
+    return artworks.map((art: any) => ({
+      id: art.id,
+      user_id: art.user_id,
+      title: art.title,
+      canvas_json: art.canvas_json,
+      thumbnail_url: art.thumbnail_url,
+      tags: art.tags || [],
+      is_public: art.is_public,
+      created_at: art.created_at,
+      updated_at: art.updated_at,
+    }));
   } catch (error) {
     console.error("Error fetching user artworks:", error);
     return [];
@@ -106,9 +107,32 @@ export async function getUserArtworks(
  */
 export async function getArtwork(id: string): Promise<ArtworkRecord | null> {
   try {
-    const art = await prisma.artwork.findUnique({ where: { id } });
+    const supabase = createAdminClient();
+    
+    const { data: art, error } = await supabase
+      .from("artworks")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      console.error("Error fetching artwork:", error);
+      return null;
+    }
+
     if (!art) return null;
-    return toArtworkRecord(art);
+
+    return {
+      id: art.id,
+      user_id: art.user_id,
+      title: art.title,
+      canvas_json: art.canvas_json,
+      thumbnail_url: art.thumbnail_url,
+      tags: art.tags || [],
+      is_public: art.is_public,
+      created_at: art.created_at,
+      updated_at: art.updated_at,
+    };
   } catch (error) {
     console.error("Error fetching artwork:", error);
     return null;
@@ -117,7 +141,7 @@ export async function getArtwork(id: string): Promise<ArtworkRecord | null> {
 
 /**
  * Save (insert or update) an artwork.
- * Uploads the thumbnail data URL to Supabase Storage bucket "voice",
+ * Uploads the thumbnail data URL to Supabase Storage bucket "public",
  * then stores the public URL in the database.
  * For new artworks, auto-sets is_public=true so they appear in the Square.
  */
@@ -129,10 +153,13 @@ export async function saveArtwork(
   thumbnailDataUrl: string,
   tags: string[] = ["Canvas"],
   isPublic: boolean = true,
+  bucketType: "public" | "private" = "public",
 ): Promise<ArtworkRecord | null> {
   try {
+    const supabase = createAdminClient();
+    
     // Upload thumbnail to Supabase Storage first
-    const thumbnailUrl = await uploadThumbnail(userId, thumbnailDataUrl);
+    const thumbnailUrl = await uploadThumbnail(userId, thumbnailDataUrl, bucketType);
     if (!thumbnailUrl) {
       console.error("Failed to upload thumbnail to Storage");
       return null;
@@ -140,35 +167,67 @@ export async function saveArtwork(
 
     if (id) {
       // Update existing
-      const art = await prisma.artwork.updateMany({
-        where: { id, userId },
-        data: {
+      const { data: art, error } = await supabase
+        .from("artworks")
+        .update({
           title,
-          canvasJson,
-          thumbnailUrl,
+          canvas_json: canvasJson,
+          thumbnail_url: thumbnailUrl,
           tags,
-          isPublic,
-        },
-      });
+          is_public: isPublic,
+        })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select("*")
+        .single();
 
-      if (art.count === 0) return null;
+      if (error) {
+        console.error("Error updating artwork:", error);
+        return null;
+      }
 
-      // Fetch the updated record
-      return await getArtwork(id);
+      return art ? {
+        id: art.id,
+        user_id: art.user_id,
+        title: art.title,
+        canvas_json: art.canvas_json,
+        thumbnail_url: art.thumbnail_url,
+        tags: art.tags || [],
+        is_public: art.is_public,
+        created_at: art.created_at,
+        updated_at: art.updated_at,
+      } : null;
     } else {
       // Insert new
-      const art = await prisma.artwork.create({
-        data: {
-          userId,
+      const { data: art, error } = await supabase
+        .from("artworks")
+        .insert({
+          user_id: userId,
           title,
-          canvasJson,
-          thumbnailUrl,
+          canvas_json: canvasJson,
+          thumbnail_url: thumbnailUrl,
           tags,
-          isPublic,
-        },
-      });
+          is_public: isPublic,
+        })
+        .select("*")
+        .single();
 
-      return toArtworkRecord(art);
+      if (error) {
+        console.error("Error creating artwork:", error);
+        return null;
+      }
+
+      return art ? {
+        id: art.id,
+        user_id: art.user_id,
+        title: art.title,
+        canvas_json: art.canvas_json,
+        thumbnail_url: art.thumbnail_url,
+        tags: art.tags || [],
+        is_public: art.is_public,
+        created_at: art.created_at,
+        updated_at: art.updated_at,
+      } : null;
     }
   } catch (error) {
     console.error("Error saving artwork:", error);
@@ -184,10 +243,20 @@ export async function deleteArtwork(
   userId: string,
 ): Promise<boolean> {
   try {
-    const result = await prisma.artwork.deleteMany({
-      where: { id, userId },
-    });
-    return result.count > 0;
+    const supabase = createAdminClient();
+    
+    const { error } = await supabase
+      .from("artworks")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error deleting artwork:", error);
+      return false;
+    }
+
+    return true;
   } catch (error) {
     console.error("Error deleting artwork:", error);
     return false;
@@ -195,18 +264,34 @@ export async function deleteArtwork(
 }
 
 export async function ensureProfile(userId: string, email?: string) {
-  const existing = await prisma.profile.findUnique({
-    where: { id: userId },
-  });
+  const supabase = createAdminClient();
+  
+  const { data: existing, error: fetchError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (fetchError && fetchError.code !== "PGRST116") {
+    console.error("Error fetching profile:", fetchError);
+    throw fetchError;
+  }
 
   if (existing) {
     if (existing.credits === 0) {
-      return prisma.profile.update({
-        where: { id: userId },
-        data: {
-          credits: 50,
-        },
-      });
+      const { data: updated, error: updateError } = await supabase
+        .from("profiles")
+        .update({ credits: 50 })
+        .eq("id", userId)
+        .select("*")
+        .single();
+
+      if (updateError) {
+        console.error("Error updating profile:", updateError);
+        throw updateError;
+      }
+
+      return updated;
     }
 
     return existing;
@@ -214,19 +299,37 @@ export async function ensureProfile(userId: string, email?: string) {
 
   const fallbackName = email?.split("@")[0] || "新用户";
 
-  return prisma.profile.create({
-    data: {
+  const { data: created, error: createError } = await supabase
+    .from("profiles")
+    .insert({
       id: userId,
       name: fallbackName,
-    },
-  });
+    })
+    .select("*")
+    .single();
+
+  if (createError) {
+    console.error("Error creating profile:", createError);
+    throw createError;
+  }
+
+  return created;
 }
 
 export async function getProfile(userId: string): Promise<ProfileRecord | null> {
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: userId },
-    });
+    const supabase = createAdminClient();
+    
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching profile:", error);
+      return null;
+    }
 
     if (!profile) {
       return null;
@@ -235,10 +338,10 @@ export async function getProfile(userId: string): Promise<ProfileRecord | null> 
     return {
       id: profile.id,
       name: profile.name,
-      avatar_url: profile.avatarUrl,
+      avatar_url: profile.avatar_url,
       credits: profile.credits,
-      created_at: profile.createdAt.toISOString(),
-      updated_at: profile.updatedAt.toISOString(),
+      created_at: profile.created_at,
+      updated_at: profile.updated_at,
     };
   } catch (error) {
     console.error("Error fetching profile:", error);
@@ -254,33 +357,67 @@ export async function consumeCredits(
     throw new Error("INVALID_CREDIT_AMOUNT");
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const profile = await tx.profile.findUnique({
-      where: { id: userId },
-    });
+  const supabase = createAdminClient();
 
-    if (!profile) {
-      throw new Error("PROFILE_NOT_FOUND");
-    }
+  // Fetch current credits
+  const { data: profile, error: fetchError } = await supabase
+    .from("profiles")
+    .select("credits")
+    .eq("id", userId)
+    .single();
 
-    if (profile.credits < amount) {
-      throw new Error("INSUFFICIENT_CREDITS");
-    }
+  if (fetchError) {
+    console.error("Error fetching profile:", fetchError);
+    throw new Error("PROFILE_NOT_FOUND");
+  }
 
-    return tx.profile.update({
-      where: { id: userId },
-      data: {
-        credits: {
-          decrement: amount,
-        },
-      },
-      select: {
-        credits: true,
-      },
-    });
-  });
+  if (!profile) {
+    throw new Error("PROFILE_NOT_FOUND");
+  }
+
+  if (profile.credits < amount) {
+    throw new Error("INSUFFICIENT_CREDITS");
+  }
+
+  // Update credits
+  const { data: updated, error: updateError } = await supabase
+    .from("profiles")
+    .update({ credits: profile.credits - amount })
+    .eq("id", userId)
+    .select("credits")
+    .single();
+
+  if (updateError) {
+    console.error("Error updating credits:", updateError);
+    throw updateError;
+  }
 
   return {
     credits: updated.credits,
   };
+}
+
+/**
+ * Log email sending to database
+ */
+export async function logEmail(userId: string, toEmail: string, subject: string, html: string, imageDataUrl?: string) {
+  try {
+    const supabase = createAdminClient();
+    
+    const { error } = await supabase
+      .from("email_logs")
+      .insert({
+        user_id: userId,
+        to_email: toEmail,
+        subject,
+        html,
+        image_data_url: imageDataUrl,
+      });
+
+    if (error) {
+      console.error("Error logging email:", error);
+    }
+  } catch (error) {
+    console.error("Error logging email:", error);
+  }
 }

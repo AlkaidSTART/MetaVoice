@@ -8,6 +8,7 @@ import { getAppBaseUrl, getStorageBucketName } from "@/lib/api/config";
 export async function uploadThumbnail(
   userId: string,
   dataUrl: string,
+  bucketType: "public" | "private" = "public",
 ): Promise<string | null> {
   try {
     const supabase = createAdminClient();
@@ -22,7 +23,7 @@ export async function uploadThumbnail(
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
 
     const { error } = await supabase.storage
-      .from(getStorageBucketName())
+      .from(getStorageBucketName(bucketType))
       .upload(fileName, buffer, {
         contentType: "image/png",
         upsert: false,
@@ -33,12 +34,24 @@ export async function uploadThumbnail(
       return null;
     }
 
-    // Get the public URL
-    const { data: publicData } = supabase.storage
-      .from(getStorageBucketName())
-      .getPublicUrl(fileName);
+    // Get the URL based on bucket type
+    if (bucketType === "public") {
+      const { data: publicData } = supabase.storage
+        .from(getStorageBucketName(bucketType))
+        .getPublicUrl(fileName);
+      return publicData.publicUrl;
+    } else {
+      // For private bucket, generate a signed URL
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from(getStorageBucketName(bucketType))
+        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days
 
-    return publicData.publicUrl;
+      if (signedUrlError) {
+        console.error("Error creating signed URL:", signedUrlError);
+        return null;
+      }
+      return signedUrlData.signedUrl;
+    }
   } catch (error) {
     console.error("Error in uploadThumbnail:", error);
     return null;
@@ -51,24 +64,34 @@ export async function uploadThumbnail(
 export async function deleteThumbnail(publicUrl: string): Promise<boolean> {
   try {
     const supabase = createAdminClient();
-    const bucketName = getStorageBucketName();
-
-    // Extract the file path from the public URL
-    const url = new URL(publicUrl);
-    const pathParts = url.pathname.split("/");
-    const bucketIndex = pathParts.indexOf(bucketName);
-    if (bucketIndex === -1) return false;
-    const filePath = pathParts.slice(bucketIndex + 1).join("/");
-
-    const { error } = await supabase.storage
-      .from(bucketName)
-      .remove([filePath]);
-
-    if (error) {
-      console.error("Error deleting thumbnail:", error);
-      return false;
+    
+    // Try both public and private buckets
+    const buckets: ("public" | "private")[] = ["public", "private"];
+    
+    for (const bucketType of buckets) {
+      const bucketName = getStorageBucketName(bucketType);
+      
+      try {
+        const url = new URL(publicUrl);
+        const pathParts = url.pathname.split("/");
+        
+        // Find bucket in path
+        const bucketIndex = pathParts.indexOf(bucketName);
+        if (bucketIndex === -1) continue;
+        
+        const filePath = pathParts.slice(bucketIndex + 1).join("/");
+        
+        const { error } = await supabase.storage
+          .from(bucketName)
+          .remove([filePath]);
+        
+        if (!error) return true;
+      } catch {
+        continue;
+      }
     }
-    return true;
+    
+    return false;
   } catch (error) {
     console.error("Error in deleteThumbnail:", error);
     return false;
@@ -81,9 +104,11 @@ export async function uploadBufferToStorage(params: {
   contentType: string;
   extension: string;
   folder?: string;
+  bucketType?: "public" | "private";
 }) {
   const supabase = createAdminClient();
-  const bucketName = getStorageBucketName();
+  const bucketType = params.bucketType || "public";
+  const bucketName = getStorageBucketName(bucketType);
   const folder = params.folder || "uploads";
   const fileName = `${params.userId}/${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 9)}.${params.extension}`;
 
@@ -96,12 +121,20 @@ export async function uploadBufferToStorage(params: {
     throw new Error(`Failed to upload file to storage: ${error.message}`);
   }
 
-  const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+  let publicUrl: string;
+  if (bucketType === "public") {
+    const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    publicUrl = data.publicUrl;
+  } else {
+    const { data } = await supabase.storage.from(bucketName).createSignedUrl(fileName, 60 * 60 * 24 * 7);
+    publicUrl = data.signedUrl;
+  }
 
   return {
     path: fileName,
-    publicUrl: data.publicUrl,
+    publicUrl,
     bucket: bucketName,
+    bucketType,
   };
 }
 
@@ -109,6 +142,7 @@ export async function uploadRemoteFileToStorage(params: {
   userId: string;
   fileUrl: string;
   folder?: string;
+  bucketType?: "public" | "private";
 }) {
   const response = await fetch(params.fileUrl);
 
@@ -131,10 +165,35 @@ export async function uploadRemoteFileToStorage(params: {
     contentType,
     extension,
     folder: params.folder || "generated",
+    bucketType: params.bucketType || "public",
   });
 }
 
 export function getStoragePublicUrl(path: string) {
   const baseUrl = getAppBaseUrl();
   return `${baseUrl}/api/storage/upload?path=${encodeURIComponent(path)}`;
+}
+
+/**
+ * Get a signed URL for private files.
+ */
+export async function getPrivateFileUrl(userId: string, filePath: string): Promise<string | null> {
+  try {
+    const supabase = createAdminClient();
+    const bucketName = getStorageBucketName("private");
+    
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(`${userId}/${filePath}`, 60 * 60 * 24); // 24 hours
+    
+    if (error) {
+      console.error("Error getting private file URL:", error);
+      return null;
+    }
+    
+    return data.signedUrl;
+  } catch (error) {
+    console.error("Error in getPrivateFileUrl:", error);
+    return null;
+  }
 }

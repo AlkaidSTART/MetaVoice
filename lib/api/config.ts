@@ -1,4 +1,5 @@
-const DEFAULT_STORAGE_BUCKET = "voice";
+const DEFAULT_STORAGE_BUCKET_PUBLIC = "public";
+const DEFAULT_STORAGE_BUCKET_PRIVATE = "private";
 const DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com";
 const DEFAULT_APP_BASE_URL = "http://localhost:3000";
 const DEFAULT_LLM_MODEL = "qwen3.7-max";
@@ -19,8 +20,11 @@ export function getAppBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || DEFAULT_APP_BASE_URL;
 }
 
-export function getStorageBucketName(): string {
-  return process.env.SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+export function getStorageBucketName(bucketType: "public" | "private" = "public"): string {
+  if (bucketType === "private") {
+    return process.env.SUPABASE_STORAGE_BUCKET_PRIVATE || DEFAULT_STORAGE_BUCKET_PRIVATE;
+  }
+  return process.env.SUPABASE_STORAGE_BUCKET_PUBLIC || DEFAULT_STORAGE_BUCKET_PUBLIC;
 }
 
 export function getDashScopeBaseUrl(): string {
@@ -31,7 +35,6 @@ export function getDashScopeApiKey(): string | null {
   return process.env.DASHSCOPE_API_KEY || null;
 }
 
-// LLM 模型配置
 export function getLlmModel(): string {
   return process.env.LLM_MODEL || DEFAULT_LLM_MODEL;
 }

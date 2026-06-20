@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma/client";
-import type { Artwork as PrismaArtwork, Prisma } from "@/generated/prisma";
+import type { Artwork as PrismaArtwork, Prisma } from "@prisma/client";
 import { uploadThumbnail } from "./storage";
 
 export type ArtworkRecord = {

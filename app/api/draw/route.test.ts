@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { drawInstructionSchema } from "../../lib/draw-schema";
+import { expandIllustrationComponents } from "../../lib/layout/illustration-expander";
 import { normalizeInstructionLayout } from "../../lib/layout/position-normalizer";
 import { getShapeBounds } from "../../lib/layout/shape-bounds";
 import { normalizeInstructionPayload } from "./route";
@@ -95,5 +96,30 @@ describe("normalizeInstructionPayload", () => {
 
     expect(bounds.maxX).toBeLessThanOrEqual(936);
     expect(bounds.minY).toBeGreaterThanOrEqual(24);
+  });
+
+  it("expands known child-friendly subjects into richer component groups", () => {
+    const parsed = drawInstructionSchema.parse(
+      normalizeInstructionPayload({
+        backgroundColor: "#FFFFFF",
+        shapes: [
+          {
+            type: "rectangle",
+            label: "房子",
+            x: 360,
+            y: 400,
+            anchor: "top-left",
+            width: 240,
+            height: 150,
+            fillColor: "#FFE0B2",
+            z: 1,
+          },
+        ],
+      }),
+    );
+
+    const result = expandIllustrationComponents(parsed);
+    expect(result.shapes.length).toBeGreaterThan(1);
+    expect(result.shapes.some((shape) => shape.label?.includes("屋顶"))).toBe(true);
   });
 });

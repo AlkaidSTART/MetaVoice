@@ -1,6 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
 import { drawInstructionSchema } from "../../lib/draw-schema";
+import { expandIllustrationComponents } from "../../lib/layout/illustration-expander";
 import { normalizeInstructionLayout } from "../../lib/layout/position-normalizer";
 import type { DrawInstruction, Segment, Shape } from "../../lib/draw-schema";
 import { buildContextSection, getPromptBuilders, type DrawContext } from "./prompts";
@@ -233,8 +234,10 @@ async function generateDrawInstruction(userPrompt: string, ctx?: DrawContext): P
   const normalized = normalizeInstructionPayload(parsed);
   const instruction = drawInstructionSchema.parse(normalized);
   const layoutNormalized = normalizeInstructionLayout(instruction, ctx);
+  const illustrationExpanded = expandIllustrationComponents(layoutNormalized);
+  const postExpandedNormalized = normalizeInstructionLayout(illustrationExpanded, ctx);
   console.log(`[draw] pipeline=online-critical elapsedMs=${Date.now() - startedAt} appendMode=${appendMode} simple=${useSimpleFlow} layout=normalized`);
-  return layoutNormalized;
+  return postExpandedNormalized;
 }
 
 export async function POST(req: Request) {

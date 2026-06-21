@@ -401,18 +401,18 @@ export default function LoginPage() {
   useEffect(() => {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-      tl.fromTo(leftRef.current, { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.8 })
+      tl.fromTo(rightRef.current, { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.8 })
+        .fromTo(
+          leftRef.current,
+          { x: 40, opacity: 0, scale: 0.96 },
+          { x: 0, opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.2)" },
+          "-=0.6"
+        )
         .fromTo(
           leftRef.current?.querySelectorAll(".stagger-item") || [],
           { y: 20, opacity: 0 },
           { y: 0, opacity: 1, duration: 0.5, stagger: 0.1 },
           "-=0.5"
-        )
-        .fromTo(
-          rightRef.current,
-          { x: 40, opacity: 0, scale: 0.96 },
-          { x: 0, opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.2)" },
-          "-=0.6"
         )
         .fromTo(
           formRef.current,
@@ -519,7 +519,12 @@ export default function LoginPage() {
       {/* Main content */}
       <div className="relative z-10 flex min-h-screen items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          {/* Left column */}
+          {/* Left column: Demo Canvas */}
+          <div ref={rightRef} className="hidden lg:flex items-center justify-center">
+            <DemoCanvas />
+          </div>
+
+          {/* Right column */}
           <div ref={leftRef}>
             <div className="mb-8">
               <div className="stagger-item inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-sakura/10 border border-sakura/20 mb-6">
@@ -722,11 +727,6 @@ export default function LoginPage() {
                 </button>
               </form>
             </div>
-          </div>
-
-          {/* Right column: Demo Canvas */}
-          <div ref={rightRef} className="hidden lg:flex items-center justify-center">
-            <DemoCanvas />
           </div>
         </div>
       </div>

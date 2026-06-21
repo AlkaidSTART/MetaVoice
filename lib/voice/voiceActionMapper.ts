@@ -1,5 +1,7 @@
 "use client";
 
+import type { VoiceCursorAnimateFn } from "@/types/global";
+
 /**
  * Voice Action Mapper — maps voice command keywords to UI element selectors,
  * then animates the custom cursor to that element and triggers a click.
@@ -121,9 +123,7 @@ export function matchVoiceToAction(
  * then triggering a click on it.
  */
 export function executeAction(action: ActionEntry): void {
-  const animate = (window as any).__voiceCursorAnimate as
-    | ((selector: string, onClick?: () => void) => void)
-    | undefined;
+  const animate: VoiceCursorAnimateFn | undefined = window.__voiceCursorAnimate;
 
   if (!animate) {
     const el = document.querySelector(action.selector) as HTMLElement | null;

@@ -131,10 +131,10 @@ export default function CustomCursor() {
 
   // Expose the animateToElement globally so voice commands can use it
   useEffect(() => {
-    (window as any).__voiceCursorAnimate = animateToElement;
+    window.__voiceCursorAnimate = animateToElement;
 
     return () => {
-      delete (window as any).__voiceCursorAnimate;
+      delete window.__voiceCursorAnimate;
     };
   }, [animateToElement]);
 

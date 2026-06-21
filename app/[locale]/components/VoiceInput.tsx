@@ -9,6 +9,7 @@ interface VoiceInputProps {
   transcript: string;
 }
 
+// Type definitions for Web Speech API (supplements lib.dom.d.ts)
 interface SpeechRecognitionEvent {
   results: {
     [index: number]: {
@@ -25,7 +26,7 @@ interface SpeechRecognitionErrorEvent {
   error: string;
 }
 
-interface SpeechRecognition {
+type SpeechRecognitionType = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -34,14 +35,7 @@ interface SpeechRecognition {
   onend: (() => void) | null;
   start(): void;
   stop(): void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
+};
 
 export default function VoiceInput({
   onTranscriptChange,
@@ -49,7 +43,7 @@ export default function VoiceInput({
 }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [recognition, setRecognition] = useState<SpeechRecognitionType | null>(null);
   const [manualInput, setManualInput] = useState("");
 
   const mounted = useSyncExternalStore(
@@ -58,8 +52,9 @@ export default function VoiceInput({
     () => false
   );
 
-  const hasSpeechSupport =
-    mounted && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  // Check for speech recognition support
+  const hasSpeechRecognition = mounted && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  const hasSpeechSupport = hasSpeechRecognition;
   const isSecureContext =
     mounted &&
     (window.location.protocol === "https:" ||
@@ -78,9 +73,8 @@ export default function VoiceInput({
     }
     setRuntimeError(null);
 
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new SpeechRecognition();
+    // @ts-expect-error - SpeechRecognition types vary by browser
+    const rec = new SpeechRecognition() as SpeechRecognitionType;
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "zh-CN";

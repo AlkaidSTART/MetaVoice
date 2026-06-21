@@ -64,6 +64,31 @@ interface XfyunResult {
   sid?: string;
 }
 
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  let body: unknown = text;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Keep the text body. Next dev error pages are HTML, not JSON.
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      typeof body === "object" && body && "error" in body
+        ? String((body as { error?: unknown }).error)
+        : text.slice(0, 160);
+    throw new Error(errorMessage || "请求语音识别服务失败");
+  }
+
+  if (typeof body === "string") {
+    throw new Error(`语音识别服务返回了非 JSON 内容: ${body.slice(0, 80)}`);
+  }
+
+  return body as T;
+}
+
 export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, transcript }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -175,7 +200,7 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
       
-      const apiResponse = await fetch('/api/voice/transcribe', {
+      const apiResponse = await fetch('/api/voice/transcribe?xfyun=true', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -183,7 +208,7 @@ export default function XfyunVoiceInput({ onTranscriptChange, onFinalResult, tra
         body: JSON.stringify({ action: 'getUrl' }),
       });
       
-      const apiData = await apiResponse.json();
+      const apiData = await parseJsonResponse<{ success?: boolean; wsUrl?: string; appId?: string; error?: string }>(apiResponse);
       
       if (!apiData.success || !apiData.wsUrl) {
         throw new Error(apiData.error || '获取语音识别连接失败');

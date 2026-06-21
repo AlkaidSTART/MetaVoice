@@ -1,11 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
 import { drawInstructionSchema } from "../../lib/draw-schema";
-import type { DrawInstruction } from "../../lib/draw-schema";
+import type { DrawInstruction, Segment, Shape } from "../../lib/draw-schema";
 import { buildContextSection, getPromptBuilders, type DrawContext } from "./prompts";
 
 const SIMPLE_PROMPT_LENGTH_THRESHOLD = 24;
 const SIMPLE_SHAPE_KEYWORDS = ["圆", "圆形", "矩形", "方形", "三角形", "直线", "星星", "五角星", "写上"];
+const CANVAS_CENTER = { x: 480, y: 360 };
 
 function normalizeDrawError(error: unknown): Error {
   const message =
@@ -57,6 +58,99 @@ function parseJsonSafe(raw: string): unknown {
       : cleaned;
 
   return JSON.parse(candidate);
+}
+
+function averagePoint(points: Array<{ x: number; y: number }>): { x: number; y: number } | null {
+  if (points.length === 0) return null;
+
+  const valid = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (valid.length === 0) return null;
+
+  const sum = valid.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  );
+
+  return {
+    x: sum.x / valid.length,
+    y: sum.y / valid.length,
+  };
+}
+
+function inferPointFromSegments(segments: Segment[] | undefined): { x: number; y: number } | null {
+  if (!segments?.length) return null;
+
+  const points: Array<{ x: number; y: number }> = [];
+  for (const segment of segments) {
+    if (segment.x != null && segment.y != null) {
+      points.push({ x: segment.x, y: segment.y });
+    }
+    if (segment.x1 != null && segment.y1 != null) {
+      points.push({ x: segment.x1, y: segment.y1 });
+    }
+    if (segment.x2 != null && segment.y2 != null) {
+      points.push({ x: segment.x2, y: segment.y2 });
+    }
+  }
+
+  return averagePoint(points);
+}
+
+function inferPointFromPolygon(points: number[] | undefined): { x: number; y: number } | null {
+  if (!points?.length || points.length < 2) return null;
+
+  const pairs: Array<{ x: number; y: number }> = [];
+  for (let index = 0; index < points.length - 1; index += 2) {
+    pairs.push({ x: points[index], y: points[index + 1] });
+  }
+
+  return averagePoint(pairs);
+}
+
+function inferShapeAnchor(shape: Partial<Shape>): { x: number; y: number } | null {
+  switch (shape.type) {
+    case "polygon":
+      return inferPointFromPolygon(shape.points);
+    case "path":
+      return inferPointFromSegments(shape.segments);
+    case "line":
+      if (shape.x2 != null && shape.y2 != null) {
+        return { x: shape.x2, y: shape.y2 };
+      }
+      return null;
+    case "text":
+      return shape.text ? { ...CANVAS_CENTER } : null;
+    default:
+      return null;
+  }
+}
+
+function normalizeShape(shape: Partial<Shape>): Partial<Shape> {
+  const inferred = inferShapeAnchor(shape) ?? CANVAS_CENTER;
+
+  return {
+    ...shape,
+    x: shape.x ?? inferred.x,
+    y: shape.y ?? inferred.y,
+  };
+}
+
+export function normalizeInstructionPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+
+  const record = payload as { shapes?: unknown };
+  if (!Array.isArray(record.shapes)) {
+    return payload;
+  }
+
+  return {
+    ...record,
+    shapes: record.shapes.map((shape) =>
+      shape && typeof shape === "object" ? normalizeShape(shape as Partial<Shape>) : shape,
+    ),
+  };
 }
 
 function getModel(): LanguageModel {
@@ -135,7 +229,8 @@ async function generateDrawInstruction(userPrompt: string, ctx?: DrawContext): P
   console.log(`[draw] stage=draw model=${drawModelName} elapsedMs=${Date.now() - drawStartedAt}`);
 
   const parsed = parseJsonSafe(rawJson);
-  const instruction = drawInstructionSchema.parse(parsed);
+  const normalized = normalizeInstructionPayload(parsed);
+  const instruction = drawInstructionSchema.parse(normalized);
   console.log(`[draw] pipeline=online-critical elapsedMs=${Date.now() - startedAt} appendMode=${appendMode} simple=${useSimpleFlow}`);
   return instruction;
 }

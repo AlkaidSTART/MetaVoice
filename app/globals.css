@@ -50,7 +50,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  cursor: none;
+  cursor: auto;
 }
 
 /* Ensure all root divs fill the screen */
@@ -67,12 +67,12 @@ input,
 textarea,
 [role="button"],
 [tabindex]:not([tabindex="-1"]) {
-  cursor: none;
+  cursor: auto;
 }
 
 /* Show default cursor when hovering over the custom cursor itself */
 .custom-cursor-area {
-  cursor: none;
+  cursor: auto;
 }
 
 /* WCAG 2.1 AA Focus Styles */

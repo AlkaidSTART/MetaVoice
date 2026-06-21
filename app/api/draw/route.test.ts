@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { drawInstructionSchema } from "../../lib/draw-schema";
+import { normalizeInstructionLayout } from "../../lib/layout/position-normalizer";
+import { getShapeBounds } from "../../lib/layout/shape-bounds";
 import { normalizeInstructionPayload } from "./route";
 
 describe("normalizeInstructionPayload", () => {
@@ -67,5 +69,31 @@ describe("normalizeInstructionPayload", () => {
     const parsed = drawInstructionSchema.parse(normalized);
     expect(parsed.shapes[0].x).toBe(480);
     expect(parsed.shapes[0].y).toBe(360);
+  });
+
+  it("normalizes parsed instruction layout before returning to callers", () => {
+    const parsed = drawInstructionSchema.parse(
+      normalizeInstructionPayload({
+        backgroundColor: "#FFFFFF",
+        shapes: [
+          {
+            type: "circle",
+            label: "太阳",
+            x: 940,
+            y: 20,
+            anchor: "center",
+            radius: 90,
+            fillColor: "#FFD54F",
+            z: 1,
+          },
+        ],
+      }),
+    );
+
+    const normalized = normalizeInstructionLayout(parsed);
+    const bounds = getShapeBounds(normalized.shapes[0]);
+
+    expect(bounds.maxX).toBeLessThanOrEqual(936);
+    expect(bounds.minY).toBeGreaterThanOrEqual(24);
   });
 });

@@ -1,0 +1,139 @@
+{
+  "common": {
+    "appName": "VoiceCanvas",
+    "loading": "加载中...",
+    "error": "发生错误",
+    "success": "操作成功",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "back": "返回"
+  },
+  "login": {
+    "title": "语音画板",
+    "subtitle": "用声音描绘想象",
+    "login": "登录",
+    "register": "注册",
+    "email": "邮箱",
+    "password": "密码",
+    "name": "用户名",
+    "forgotPassword": "忘记密码？",
+    "noAccount": "没有账号？",
+    "hasAccount": "已有账号？",
+    "guestLogin": "访客登录",
+    "loginSuccess": "登录成功",
+    "registerSuccess": "注册成功",
+    "loginError": "登录失败，请重试",
+    "registerError": "注册失败，请重试"
+  },
+  "canvas": {
+    "title": "画布",
+    "trySay": "试试说：",
+    "trySayExample": "画一个红色圆形",
+    "undo": "撤销",
+    "redo": "重做",
+    "newCanvas": "新建画布",
+    "clearCanvas": "清空画布",
+    "save": "保存作品",
+    "export": "导出图片",
+    "aiMode": "AI 模式",
+    "canvasMode": "画布模式",
+    "recording": "录音中...",
+    "processing": "处理中...",
+    "transcriptPlaceholder": "请说出你想绘制的内容...",
+    "undoDev": "撤销功能开发中",
+    "redoDev": "重做功能开发中",
+    "clearConfirm": "确定要清空画布吗？",
+    "saveSuccess": "作品已保存",
+    "exportSuccess": "图片已导出",
+    "voiceRecognized": "识别结果已填入绘图描述"
+  },
+  "saveModal": {
+    "title": "保存作品",
+    "namePlaceholder": "给作品起个名字",
+    "descriptionPlaceholder": "添加描述（可选）",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "gallery": {
+    "title": "作品图库",
+    "empty": "还没有保存的作品",
+    "emptyHint": "去画布创作你的第一幅作品吧！",
+    "deleteConfirm": "确定要删除这个作品吗？",
+    "deleteSuccess": "作品已删除",
+    "loadSuccess": "作品已加载"
+  },
+  "voice": {
+    "startRecording": "开始录音",
+    "stopRecording": "停止录音",
+    "micButtonLabel": "麦克风按钮",
+    "micButtonActive": "正在录音",
+    "micButtonIdle": "点击开始录音",
+    "recognitionError": "语音识别失败，请重试",
+    "recognitionNotSupported": "您的浏览器不支持语音识别"
+  },
+  "teaching": {
+    "title": "小小创作家",
+    "speakHint": "说一句完整画面，AI 会把它慢慢画出来。",
+    "appendHint": "画好以后，还可以继续说“再加一朵云”这样的补充。",
+    "listening": "正在认真听你说话，慢慢说也没关系。",
+    "thinking": "AI 画师正在想怎么把你的想法画出来。",
+    "appendMode": "现在可以继续补充画面，比如再加星星、彩虹或小动物。",
+    "undoAdd": "撤回刚刚添加的内容",
+    "examples": {
+      "scene1": "画一只在云上跳舞的小兔子",
+      "scene2": "画一座有彩虹的糖果城堡",
+      "append1": "再加一朵会发光的云"
+    }
+  },
+  "toast": {
+    "success": "成功",
+    "error": "错误",
+    "warning": "警告",
+    "info": "提示"
+  },
+  "shapes": {
+    "circle": "圆形",
+    "rectangle": "矩形",
+    "triangle": "三角形",
+    "line": "直线",
+    "star": "五角星",
+    "text": "文字"
+  },
+  "colors": {
+    "red": "红色",
+    "blue": "蓝色",
+    "green": "绿色",
+    "pink": "粉色",
+    "yellow": "黄色",
+    "purple": "紫色",
+    "orange": "橙色",
+    "white": "白色",
+    "black": "黑色"
+  },
+  "positions": {
+    "center": "中间",
+    "left": "左边",
+    "right": "右边",
+    "top": "上面",
+    "bottom": "下面"
+  },
+  "sizes": {
+    "large": "大",
+    "medium": "中",
+    "small": "小",
+    "veryLarge": "很大",
+    "verySmall": "很小"
+  },
+  "commands": {
+    "draw": "画",
+    "write": "写上",
+    "undo": "撤销",
+    "redo": "重做",
+    "clear": "清空",
+    "save": "保存",
+    "export": "导出"
+  }
+}

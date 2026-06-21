@@ -4,8 +4,9 @@
 
 ## 📺 视频演示
 
-**B站视频链接**：[https://www.bilibili.com/video/BV1pSJA6NEUw/?vd_source=5da587cf9716888499951dd0c8cc205d] \*部署链接\*\*：[https://voice-smoky-five.vercel.app](https://voice-smoky-five.vercel.app)
-
+**B站视频链接**：[https://www.bilibili.com/video/BV1pSJA6NEUw/?vd_source=5da587cf9716888499951dd0c8cc205d]
+**部署链接**：[https://voice-smoky-five.vercel.app](https://voice-smoky-five.vercel.app)
+**项目链接**：[https://gisfy.alkaid.live/zh/canvas]
 ---
 
 ## 🏗️ 业务架构

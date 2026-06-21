@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { requireApiUser } from "@/lib/api/auth";
 import { chargeCredits, getUserCredits } from "@/lib/api/credits";
-import { getDashScopeApiKey } from "@/lib/api/config";
+import { getDashScopeApiKey, getOptionalEnv } from "@/lib/api/config";
 import { transcribeWithQwenASR } from "@/lib/dashscope/asr";
 import { parseTranscript } from "@/lib/voice/speechRecognition";
 
@@ -59,10 +59,17 @@ function buildWsUrl(appId: string, apiKey: string, apiSecret: string): string {
 export async function POST(req: NextRequest) {
   try {
     // 支持讯飞 WebSocket URL 获取
-    if (req.nextUrl.searchParams.get("xfyun") === "true") {
-      const APP_ID = process.env.NEXT_PUBLIC_XFYUN_APP_ID;
-      const API_KEY = process.env.NEXT_PUBLIC_XFYUN_API_KEY;
-      const API_SECRET = process.env.NEXT_PUBLIC_XFYUN_API_SECRET;
+    const contentType = req.headers.get("content-type") || "";
+    const shouldParseJson = contentType.includes("application/json");
+    const jsonBody = shouldParseJson ? await req.json().catch(() => null) : null;
+    const wantsXfyunUrl =
+      req.nextUrl.searchParams.get("xfyun") === "true" ||
+      jsonBody?.action === "getUrl";
+
+    if (wantsXfyunUrl) {
+      const APP_ID = getOptionalEnv("NEXT_PUBLIC_XFYUN_APP_ID", "XFYUN_APP_ID");
+      const API_KEY = getOptionalEnv("NEXT_PUBLIC_XFYUN_API_KEY", "XFYUN_API_KEY");
+      const API_SECRET = getOptionalEnv("NEXT_PUBLIC_XFYUN_API_SECRET", "XFYUN_API_SECRET");
 
       if (!APP_ID || !API_KEY || !API_SECRET) {
         console.error('讯飞API配置缺失');

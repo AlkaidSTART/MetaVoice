@@ -1,23 +1,24 @@
 'use client';
 
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter, usePathname } from '@/i18n/routing';
 import { Globe } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { gsap } from 'gsap';
 
-const locales = [
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-];
-
 export default function LanguageSwitcher() {
   const locale = useLocale();
+  const tLanguage = useTranslations('language');
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const locales = [
+    { code: 'zh', name: tLanguage('zh'), flag: '🇨🇳' },
+    { code: 'en', name: tLanguage('en'), flag: '🇺🇸' },
+  ];
 
   const currentLocale = locales.find((l) => l.code === locale) || locales[0];
 
@@ -61,7 +62,7 @@ export default function LanguageSwitcher() {
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface/80 hover:bg-sakura-light/20 border border-sakura/10 transition-all"
-        aria-label="切换语言"
+        aria-label={tLanguage('switcherLabel')}
         aria-expanded={isOpen}
       >
         <Globe className="w-4 h-4 text-sakura" />

@@ -32,6 +32,7 @@
     "title": "Canvas",
     "trySay": "Try saying:",
     "trySayExample": "Draw a red circle",
+    "voiceInputPreparing": "Preparing voice input...",
     "undo": "Undo",
     "redo": "Redo",
     "newCanvas": "New Canvas",
@@ -48,12 +49,78 @@
     "clearConfirm": "Are you sure you want to clear the canvas?",
     "saveSuccess": "Artwork saved",
     "exportSuccess": "Image exported",
-    "voiceRecognized": "Voice result filled in"
+    "voiceRecognized": "Your transcript has been added to the drawing prompt",
+    "loadFailed": "Failed to load artwork",
+    "loadSuccess": "Artwork loaded. You can keep creating.",
+    "loadCorruptedFallback": "Artwork data was invalid. A new canvas has been created.",
+    "cannotAccessCanvas": "Unable to access the canvas",
+    "saveFailed": "Save failed. Please try again.",
+    "autoSaved": "Your current artwork was auto-saved",
+    "newCanvasCreated": "A new canvas is ready",
+    "canvasCleared": "Canvas cleared",
+    "nothingToAdjust": "There is nothing to adjust yet. Draw a new element first.",
+    "positionAdjusted": "Position updated",
+    "madeWarmer": "The colors are now a little warmer",
+    "madeCooler": "The colors are now a little cooler",
+    "sentToWechat": "Sent to WeChat automatically",
+    "enterDescriptionFirst": "Enter a drawing prompt first",
+    "generating": "Generating your drawing...",
+    "reusedHistory": "A similar prompt was found. Reusing the previous result.",
+    "drawFailed": "Drawing failed. Please try again.",
+    "drawComplete": "Drawing finished. Remember to save your artwork.",
+    "descriptionTitle": "Drawing Prompt",
+    "thinkingBadge": "AI is thinking",
+    "descriptionAriaLabel": "Drawing prompt input",
+    "singleScreenLayout": "Single-screen layout",
+    "startDrawing": "Start Drawing",
+    "drawing": "Drawing...",
+    "openGallery": "Open gallery",
+    "galleryShort": "Gallery",
+    "logout": "Log out",
+    "drawingMode": "Draw",
+    "inspirationExample": "Inspiration example",
+    "thinkingOverlay": "Thinking about how to draw your artwork...",
+    "loading": "Loading...",
+    "canvasAriaLabel": "Drawing canvas controlled by voice commands",
+    "saveToGallery": "Save to gallery",
+    "exportPng": "Export PNG",
+    "saveUntitled": "Untitled Artwork",
+    "fallbackDownloadName": "drawing",
+    "generationError": "Drawing generation failed",
+    "presetTemplates": {
+      "sunrise": {
+        "title": "Sunrise Scene",
+        "prompt": "Draw a beautiful sunrise with the sun rising above the horizon"
+      },
+      "house": {
+        "title": "Houses & Buildings",
+        "prompt": "Draw a cute little house"
+      },
+      "flower": {
+        "title": "Flowers & Plants",
+        "prompt": "Draw a lovely cherry blossom"
+      },
+      "stars": {
+        "title": "Stars & Moon",
+        "prompt": "Draw a night sky filled with stars"
+      },
+      "animal": {
+        "title": "Cute Animals",
+        "prompt": "Draw a little orange cat"
+      },
+      "abstract": {
+        "title": "Abstract Art",
+        "prompt": "Draw a pattern made of geometric shapes"
+      }
+    }
   },
   "saveModal": {
     "title": "Save Artwork",
+    "nameLabel": "Artwork Name",
     "namePlaceholder": "Name your artwork",
     "descriptionPlaceholder": "Add description (optional)",
+    "nameMaxLengthHint": "Up to 50 characters",
+    "close": "Close",
     "save": "Save",
     "cancel": "Cancel"
   },
@@ -87,6 +154,21 @@
       "scene2": "Draw a candy castle with a rainbow",
       "append1": "Add one glowing cloud"
     }
+  },
+  "idleGuide": {
+    "transcript1": "Draw a red circle",
+    "transcript2": "Draw a blue rectangle",
+    "transcript3": "Draw a yellow star",
+    "ready": "Ready to begin",
+    "listening": "Listening...",
+    "thinking": "AI is thinking",
+    "drawing": "Drawing",
+    "complete": "Finished drawing!"
+  },
+  "language": {
+    "switcherLabel": "Switch language",
+    "zh": "Chinese",
+    "en": "English"
   },
   "toast": {
     "success": "Success",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { X, Save } from "lucide-react";
 import gsap from "gsap";
 
@@ -19,6 +20,7 @@ export default function SaveModal({
   title,
   onTitleChange,
 }: SaveModalProps) {
+  const tSaveModal = useTranslations("saveModal");
   const modalRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,13 +122,13 @@ export default function SaveModal({
               id="save-modal-title"
               className="text-lg font-semibold text-text-primary"
             >
-              保存作品
+              {tSaveModal("title")}
             </h2>
           </div>
           <button
             onClick={handleClose}
             className="p-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
-            aria-label="关闭"
+            aria-label={tSaveModal("close")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -138,7 +140,7 @@ export default function SaveModal({
             htmlFor="artwork-title"
             className="block text-sm font-medium text-text-primary mb-2"
           >
-            作品名称
+            {tSaveModal("nameLabel")}
           </label>
           <input
             ref={inputRef}
@@ -147,12 +149,12 @@ export default function SaveModal({
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="请输入作品名称..."
+            placeholder={tSaveModal("namePlaceholder")}
             className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-text-primary outline-none transition-all placeholder:text-text-disabled focus:border-sakura focus:ring-2 focus:ring-sakura/30"
             maxLength={50}
           />
           <p className="text-xs text-text-secondary mt-2">
-            最多50个字符
+            {tSaveModal("nameMaxLengthHint")}
           </p>
         </div>
 
@@ -162,7 +164,7 @@ export default function SaveModal({
             onClick={handleClose}
             className="px-4 py-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all font-medium text-sm"
           >
-            取消
+            {tSaveModal("cancel")}
           </button>
           <button
             onClick={handleSave}
@@ -173,7 +175,7 @@ export default function SaveModal({
                 : "bg-text-disabled text-white cursor-not-allowed"
             }`}
           >
-            保存
+            {tSaveModal("save")}
           </button>
         </div>
       </div>

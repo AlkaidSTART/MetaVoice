@@ -32,6 +32,7 @@
     "title": "画布",
     "trySay": "试试说：",
     "trySayExample": "画一个红色圆形",
+    "voiceInputPreparing": "正在准备语音输入...",
     "undo": "撤销",
     "redo": "重做",
     "newCanvas": "新建画布",
@@ -48,12 +49,78 @@
     "clearConfirm": "确定要清空画布吗？",
     "saveSuccess": "作品已保存",
     "exportSuccess": "图片已导出",
-    "voiceRecognized": "识别结果已填入绘图描述"
+    "voiceRecognized": "识别结果已填入绘图描述",
+    "loadFailed": "加载作品失败",
+    "loadSuccess": "已加载作品，可继续创作",
+    "loadCorruptedFallback": "作品数据异常，已创建新画布",
+    "cannotAccessCanvas": "无法获取画布内容",
+    "saveFailed": "保存失败，请重试",
+    "autoSaved": "当前作品已自动保存",
+    "newCanvasCreated": "已创建新画布",
+    "canvasCleared": "画布已清空",
+    "nothingToAdjust": "还没有可调整的对象，请先继续画一个新元素",
+    "positionAdjusted": "位置已经调整好了",
+    "madeWarmer": "颜色已经调暖一点了",
+    "madeCooler": "颜色已经调冷一点了",
+    "sentToWechat": "已自动发送到微信",
+    "enterDescriptionFirst": "请先输入绘图描述",
+    "generating": "正在生成绘图...",
+    "reusedHistory": "找到相似提示词，使用历史结果",
+    "drawFailed": "绘图失败，请重试",
+    "drawComplete": "绘图完成，记得保存作品",
+    "descriptionTitle": "绘图描述",
+    "thinkingBadge": "AI 正在思考",
+    "descriptionAriaLabel": "绘图描述输入框",
+    "singleScreenLayout": "单屏布局",
+    "startDrawing": "开始绘图",
+    "drawing": "绘制中...",
+    "openGallery": "打开图库",
+    "galleryShort": "图库",
+    "logout": "登出",
+    "drawingMode": "绘图",
+    "inspirationExample": "灵感示例",
+    "thinkingOverlay": "正在思考如何绘制你的作品...",
+    "loading": "加载中...",
+    "canvasAriaLabel": "绘图画布 - 通过语音指令控制绘图",
+    "saveToGallery": "保存到图库",
+    "exportPng": "导出 PNG",
+    "saveUntitled": "未命名作品",
+    "fallbackDownloadName": "drawing",
+    "generationError": "绘图生成失败",
+    "presetTemplates": {
+      "sunrise": {
+        "title": "日出日落",
+        "prompt": "画一个美丽的日出场景，太阳从地平线升起"
+      },
+      "house": {
+        "title": "建筑房屋",
+        "prompt": "画一栋可爱的小房子"
+      },
+      "flower": {
+        "title": "花朵植物",
+        "prompt": "画一朵漂亮的樱花"
+      },
+      "stars": {
+        "title": "星星月亮",
+        "prompt": "画一个满天星空的夜晚"
+      },
+      "animal": {
+        "title": "可爱动物",
+        "prompt": "画一只橘色的小猫"
+      },
+      "abstract": {
+        "title": "抽象艺术",
+        "prompt": "画一些几何图形组成的图案"
+      }
+    }
   },
   "saveModal": {
     "title": "保存作品",
+    "nameLabel": "作品名称",
     "namePlaceholder": "给作品起个名字",
     "descriptionPlaceholder": "添加描述（可选）",
+    "nameMaxLengthHint": "最多50个字符",
+    "close": "关闭",
     "save": "保存",
     "cancel": "取消"
   },
@@ -87,6 +154,21 @@
       "scene2": "画一座有彩虹的糖果城堡",
       "append1": "再加一朵会发光的云"
     }
+  },
+  "idleGuide": {
+    "transcript1": "画一个红色的圆形",
+    "transcript2": "画一个蓝色的矩形",
+    "transcript3": "画一个黄色的五角星",
+    "ready": "准备开始",
+    "listening": "正在聆听...",
+    "thinking": "AI 正在思考",
+    "drawing": "正在绘制",
+    "complete": "绘制完成！"
+  },
+  "language": {
+    "switcherLabel": "切换语言",
+    "zh": "中文",
+    "en": "English"
   },
   "toast": {
     "success": "成功",

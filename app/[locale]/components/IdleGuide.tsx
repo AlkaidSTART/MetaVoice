@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { Mic, Sparkles, Circle, Square, Star } from 'lucide-react';
 import { gsap } from 'gsap';
 
@@ -9,31 +10,18 @@ interface IdleGuideProps {
 }
 
 // 模拟的语音指令和对应的图形
-const DEMO_SCENARIOS = [
-  {
-    transcript: '画一个红色的圆形',
-    shape: 'circle',
-    color: '#FF6B6B',
-    icon: Circle,
-  },
-  {
-    transcript: '画一个蓝色的矩形',
-    shape: 'rectangle',
-    color: '#4DABF7',
-    icon: Square,
-  },
-  {
-    transcript: '画一个黄色的五角星',
-    shape: 'star',
-    color: '#FFD43B',
-    icon: Star,
-  },
-];
-
 const runDemoCycle = (
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   tlRef: React.MutableRefObject<gsap.core.Timeline | null>,
-  indexRef: React.MutableRefObject<number>
+  indexRef: React.MutableRefObject<number>,
+  scenarios: Array<{ transcript: string; shape: string; color: string; icon: typeof Circle }>,
+  copy: {
+    ready: string;
+    listening: string;
+    thinking: string;
+    drawing: string;
+    complete: string;
+  }
 ) => {
   if (!canvasRef.current) return;
 
@@ -64,7 +52,7 @@ const runDemoCycle = (
     }
   };
 
-  const drawShape = (scenario: typeof DEMO_SCENARIOS[0], progress: number) => {
+  const drawShape = (scenario: (typeof scenarios)[number], progress: number) => {
     drawBackground();
 
     ctx.strokeStyle = scenario.color;
@@ -119,13 +107,13 @@ const runDemoCycle = (
   };
 
   const createDemoTimeline = () => {
-    const scenario = DEMO_SCENARIOS[indexRef.current];
+    const scenario = scenarios[indexRef.current];
 
     const tl = gsap.timeline({
       onComplete: () => {
-        indexRef.current = (indexRef.current + 1) % DEMO_SCENARIOS.length;
+        indexRef.current = (indexRef.current + 1) % scenarios.length;
         gsap.delayedCall(2, () => {
-          runDemoCycle(canvasRef, tlRef, indexRef);
+          runDemoCycle(canvasRef, tlRef, indexRef, scenarios, copy);
         });
       },
     });
@@ -136,7 +124,7 @@ const runDemoCycle = (
     const progressFillEl = document.querySelector('.progress-fill') as HTMLDivElement | null;
 
     tl.set('.status-icon', { className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura' });
-    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '准备开始'; });
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = copy.ready; });
     tl.set('.shape-preview', { opacity: 0 });
     tl.set('.transcript-box', { opacity: 0 });
     tl.set('.progress-bar', { opacity: 0 });
@@ -146,7 +134,7 @@ const runDemoCycle = (
       className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-macaron-blue-light text-macaron-blue',
       duration: 0.3,
     });
-    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在聆听...'; }, undefined, '<');
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = copy.listening; }, undefined, '<');
     tl.to('.transcript-box', { opacity: 1, duration: 0.2 });
 
     const typingDuration = scenario.transcript.length * 120;
@@ -172,7 +160,7 @@ const runDemoCycle = (
       className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-lavender-light text-lavender',
       duration: 0.3,
     });
-    tl.call(() => { if (statusTextEl) statusTextEl.textContent = 'AI 正在思考'; }, undefined, '<');
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = copy.thinking; }, undefined, '<');
     tl.to('.transcript-box', { opacity: 0, duration: 0.2 }, '<');
     tl.to('.shape-preview', { opacity: 1, duration: 0.3 });
     tl.to({}, { duration: 1.2 });
@@ -181,7 +169,7 @@ const runDemoCycle = (
       className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-mint-light text-mint',
       duration: 0.3,
     });
-    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '正在绘制'; }, undefined, '<');
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = copy.drawing; }, undefined, '<');
     tl.to('.progress-bar', { opacity: 1, duration: 0.2 }, '<');
 
     tl.to({ progress: 0 }, {
@@ -199,7 +187,7 @@ const runDemoCycle = (
       className: 'status-icon w-10 h-10 rounded-full flex items-center justify-center bg-sakura-light text-sakura',
       duration: 0.3,
     }, '+=0.2');
-    tl.call(() => { if (statusTextEl) statusTextEl.textContent = '绘制完成！'; }, undefined, '<');
+    tl.call(() => { if (statusTextEl) statusTextEl.textContent = copy.complete; }, undefined, '<');
     tl.to('.progress-bar', { opacity: 0, duration: 0.2 }, '<');
     tl.to('.shape-preview', { opacity: 0, duration: 0.2 }, '<');
     tl.to({}, { duration: 1 });
@@ -212,11 +200,33 @@ const runDemoCycle = (
 };
 
 export default function IdleGuide({ visible }: IdleGuideProps) {
+  const tIdleGuide = useTranslations('idleGuide');
   const containerRef = useRef<HTMLDivElement>(null);
   const demoCanvasRef = useRef<HTMLCanvasElement>(null);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
   const ctxRef = useRef<gsap.Context | null>(null);
   const scenarioIndexRef = useRef(0);
+
+  const demoScenarios = [
+    {
+      transcript: tIdleGuide('transcript1'),
+      shape: 'circle',
+      color: '#FF6B6B',
+      icon: Circle,
+    },
+    {
+      transcript: tIdleGuide('transcript2'),
+      shape: 'rectangle',
+      color: '#4DABF7',
+      icon: Square,
+    },
+    {
+      transcript: tIdleGuide('transcript3'),
+      shape: 'star',
+      color: '#FFD43B',
+      icon: Star,
+    },
+  ] as const;
 
   // 初始化入场动画和背景装饰
   useEffect(() => {
@@ -302,7 +312,19 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
 
       // 延迟运行演示循环
       gsap.delayedCall(0.5, () => {
-        runDemoCycle(demoCanvasRef, timelineRef, scenarioIndexRef);
+      runDemoCycle(
+        demoCanvasRef,
+        timelineRef,
+        scenarioIndexRef,
+        demoScenarios as Array<{ transcript: string; shape: string; color: string; icon: typeof Circle }>,
+        {
+          ready: tIdleGuide('ready'),
+          listening: tIdleGuide('listening'),
+          thinking: tIdleGuide('thinking'),
+          drawing: tIdleGuide('drawing'),
+          complete: tIdleGuide('complete'),
+        }
+      );
       });
     }, containerRef);
 
@@ -310,7 +332,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
       ctxRef.current?.revert();
       timelineRef.current?.kill();
     };
-  }, [visible]);
+  }, [demoScenarios, tIdleGuide, visible]);
 
   if (!visible) return null;
 
@@ -362,7 +384,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
 
         {/* 状态文字 */}
         <div className="text-center">
-          <p className="status-text text-sm font-medium text-text-primary">准备开始</p>
+          <p className="status-text text-sm font-medium text-text-primary">{tIdleGuide('ready')}</p>
         </div>
 
         {/* 形状预览 */}
@@ -386,17 +408,17 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
       {/* 引导文字 */}
       <div className="guide-text text-center mt-2 opacity-0">
         <h3 className="text-lg font-bold text-text-primary mb-1">
-          体验语音绘图的魔法
+          VoiceCanvas
         </h3>
         <p className="text-xs text-text-secondary max-w-xs">
-          点击下方麦克风按钮，说出你想画的内容
+          {tIdleGuide('listening')}
         </p>
       </div>
 
       {/* 示例指令提示 */}
       <div className="hint-text mt-3 flex items-center gap-2 text-xs text-text-disabled opacity-0">
         <Sparkles className="w-3 h-3" />
-        <span>试试说：画一个圆形 / 画一个红色的矩形 / 画一个五角星</span>
+        <span>{`${tIdleGuide('transcript1')} / ${tIdleGuide('transcript2')} / ${tIdleGuide('transcript3')}`}</span>
       </div>
     </div>
   );

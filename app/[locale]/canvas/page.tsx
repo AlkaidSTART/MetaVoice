@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import {
@@ -61,11 +61,7 @@ import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const XfyunVoiceInput = dynamic(() => import('../components/XfyunVoiceInput'), {
   ssr: false,
-  loading: () => (
-    <div className="flex min-h-[196px] items-center justify-center rounded-2xl border border-sakura/10 bg-surface/70 px-4 py-6 text-sm text-text-secondary">
-      正在准备语音输入...
-    </div>
-  ),
+  loading: () => <div className="h-[196px]" />,
 });
 
 const SaveModal = dynamic(() => import('../components/SaveModal'));
@@ -88,15 +84,6 @@ const IdleGuide = dynamic(() => import('../components/IdleGuide'), {
   ssr: false,
 });
 
-const presetTemplates = [
-  { icon: 'Sun', title: '日出日落', prompt: '画一个美丽的日出场景，太阳从地平线升起' },
-  { icon: 'Home', title: '建筑房屋', prompt: '画一栋可爱的小房子' },
-  { icon: 'Flower2', title: '花朵植物', prompt: '画一朵漂亮的樱花' },
-  { icon: 'Star', title: '星星月亮', prompt: '画一个满天星空的夜晚' },
-  { icon: 'Cat', title: '可爱动物', prompt: '画一只橘色的小猫' },
-  { icon: 'Palette', title: '抽象艺术', prompt: '画一些几何图形组成的图案' },
-] as const;
-
 const presetShapes = [
   { type: 'circle', color: '#FFB7C5', size: 30 },
   { type: 'square', color: '#B5D5F5', size: 25 },
@@ -113,6 +100,15 @@ export default function CanvasPage() {
   const searchParams = useSearchParams();
   const tCanvas = useTranslations('canvas');
   const tTeaching = useTranslations('teaching');
+
+  const presetTemplates = useMemo(() => [
+    { icon: 'Sun', title: tCanvas('presetTemplates.sunrise.title'), prompt: tCanvas('presetTemplates.sunrise.prompt') },
+    { icon: 'Home', title: tCanvas('presetTemplates.house.title'), prompt: tCanvas('presetTemplates.house.prompt') },
+    { icon: 'Flower2', title: tCanvas('presetTemplates.flower.title'), prompt: tCanvas('presetTemplates.flower.prompt') },
+    { icon: 'Star', title: tCanvas('presetTemplates.stars.title'), prompt: tCanvas('presetTemplates.stars.prompt') },
+    { icon: 'Cat', title: tCanvas('presetTemplates.animal.title'), prompt: tCanvas('presetTemplates.animal.prompt') },
+    { icon: 'Palette', title: tCanvas('presetTemplates.abstract.title'), prompt: tCanvas('presetTemplates.abstract.prompt') },
+  ] as const, [tCanvas]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -235,7 +231,7 @@ export default function CanvasPage() {
         }
       } catch (error) {
         console.error('加载作品失败:', error);
-        addToast('error', '加载作品失败');
+        addToast('error', tCanvas('loadFailed'));
       }
     };
 
@@ -1199,14 +1195,14 @@ export default function CanvasPage() {
       setCurrentArtworkId(artwork.id);
       setSaveTitle(artwork.title);
       setHasUnsavedChanges(false);
-      addToast('success', '已加载作品，可继续创作');
+      addToast('success', tCanvas('loadSuccess'));
       // 重绘画布
       redrawFromState(state);
     } else {
       // 如果无法解析canvasData，尝试从thumbnail恢复
-      addToast('warning', '作品数据异常，已创建新画布');
+      addToast('warning', tCanvas('loadCorruptedFallback'));
     }
-  }, [addToast, redrawFromState]);
+  }, [addToast, redrawFromState, tCanvas]);
 
   // 绘制图形到 Canvas（双缓冲 + 画笔动画）
   //
@@ -1460,7 +1456,7 @@ export default function CanvasPage() {
 
   // 保存到图库（带命名）
   const handleSaveClick = useCallback(() => {
-    const defaultTitle = sessionDescription.substring(0, 30) || '未命名作品';
+    const defaultTitle = sessionDescription.substring(0, 30) || tCanvas('saveUntitled');
     setSaveTitle(defaultTitle);
     setSaveModalOpen(true);
   }, [sessionDescription]);
@@ -1468,7 +1464,7 @@ export default function CanvasPage() {
   const handleSaveConfirm = useCallback(async (title: string) => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      addToast('error', '无法获取画布内容');
+      addToast('error', tCanvas('cannotAccessCanvas'));
       return;
     }
 
@@ -1494,12 +1490,12 @@ export default function CanvasPage() {
 
       setSaveModalOpen(false);
       setHasUnsavedChanges(false);
-      addToast('success', '作品已保存到图库');
+      addToast('success', tCanvas('saveSuccess'));
     } catch (error) {
       console.error('保存失败:', error);
-      addToast('error', '保存失败，请重试');
+      addToast('error', tCanvas('saveFailed'));
     }
-  }, [canvasRef, canvasState, currentArtworkId, user, addToast]);
+  }, [canvasRef, canvasState, currentArtworkId, user, addToast, tCanvas]);
 
   // 新建画布（自动保存当前作品）
   const handleNewCanvas = useCallback(async () => {
@@ -1510,7 +1506,7 @@ export default function CanvasPage() {
         try {
           const thumbnail = canvas.toDataURL('image/png');
           const canvasData = serializeState(canvasState);
-          const defaultTitle = sessionDescription.substring(0, 30) || '未命名作品';
+          const defaultTitle = sessionDescription.substring(0, 30) || tCanvas('saveUntitled');
 
           if (currentArtworkId) {
             await artworkDB.update(currentArtworkId, {
@@ -1526,7 +1522,7 @@ export default function CanvasPage() {
               canvasData,
             });
           }
-          addToast('info', '当前作品已自动保存');
+          addToast('info', tCanvas('autoSaved'));
         } catch (error) {
           console.error('自动保存失败:', error);
         }
@@ -1551,29 +1547,29 @@ export default function CanvasPage() {
     setCanvasState(emptyState());
     setHistory([]);
     setIsAppending(false);
-    addToast('success', '已创建新画布');
-  }, [hasUnsavedChanges, canvasRef, canvasState, sessionDescription, currentArtworkId, user, addToast]);
+    addToast('success', tCanvas('newCanvasCreated'));
+  }, [hasUnsavedChanges, canvasRef, canvasState, sessionDescription, currentArtworkId, user, addToast, tCanvas]);
 
   // 导出 PNG
   const exportPNG = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      addToast('error', '无法获取画布内容');
+      addToast('error', tCanvas('cannotAccessCanvas'));
       return;
     }
 
     try {
       const link = document.createElement('a');
-      const title = sessionDescription.substring(0, 30) || 'drawing';
+      const title = sessionDescription.substring(0, 30) || tCanvas('fallbackDownloadName');
       link.download = `${title}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      addToast('success', '图片已导出');
+      addToast('success', tCanvas('exportSuccess'));
     } catch (error) {
       console.error('导出 PNG 失败:', error);
-      addToast('error', '导出失败');
+      addToast('error', tCanvas('drawFailed'));
     }
-  }, [canvasRef, sessionDescription, addToast]);
+  }, [canvasRef, sessionDescription, addToast, tCanvas]);
 
   // 清空画布
   const clearCanvas = useCallback(() => {
@@ -1591,8 +1587,8 @@ export default function CanvasPage() {
     setCanvasState(emptyState());
     setHistory([]);
     setIsAppending(false);
-    addToast('success', '画布已清空');
-  }, [canvasRef, addToast]);
+    addToast('success', tCanvas('canvasCleared'));
+  }, [canvasRef, addToast, tCanvas]);
 
   // 打开图库
   const openGallery = useCallback(() => {
@@ -1605,7 +1601,7 @@ export default function CanvasPage() {
 
     const targetIds = resolveShapeIdsByHint(canvasState.shapes, command.targetHint, activeShapeIds);
     if (targetIds.length === 0) {
-      addToast('warning', '还没有可调整的对象，请先继续画一个新元素');
+      addToast('warning', tCanvas('nothingToAdjust'));
       return true;
     }
 
@@ -1620,13 +1616,13 @@ export default function CanvasPage() {
         targetCenter.x - groupBounds.cx,
         targetCenter.y - groupBounds.cy
       );
-      addToast('success', '位置已经调整好了');
+      addToast('success', tCanvas('positionAdjusted'));
     } else if (command.kind === 'recolor-warm') {
       nextState = warmShapesByIds(canvasState, targetIds, command.amount);
-      addToast('success', '颜色已经调暖一点了');
+      addToast('success', tCanvas('madeWarmer'));
     } else if (command.kind === 'recolor-cool') {
       nextState = coolShapesByIds(canvasState, targetIds, command.amount);
-      addToast('success', '颜色已经调冷一点了');
+      addToast('success', tCanvas('madeCooler'));
     }
 
     setCanvasState(nextState);
@@ -1634,7 +1630,7 @@ export default function CanvasPage() {
     setHasUnsavedChanges(true);
     redrawFromState(nextState);
     return true;
-  }, [activeShapeIds, addToast, canvasState, getGroupBounds, redrawFromState, resolvePositionCenter]);
+  }, [activeShapeIds, addToast, canvasState, getGroupBounds, redrawFromState, resolvePositionCenter, tCanvas]);
 
   const handleUndoAdd = useCallback(() => {
     const lastEntry = history[history.length - 1];
@@ -1690,17 +1686,17 @@ export default function CanvasPage() {
       const data = await parseJsonSafely(result);
       
       if (data.success) {
-        addToast('success', '已自动发送到微信');
+        addToast('success', tCanvas('sentToWechat'));
       }
     } catch (error) {
       console.error('Auto send to WeChat error:', error);
     }
-  }, [canvasRef, addToast, parseJsonSafely]);
+  }, [canvasRef, addToast, parseJsonSafely, tCanvas]);
 
   // 处理开始绘图
   const handleStartDrawing = useCallback(async () => {
     if (!sessionDescription.trim()) {
-      addToast('warning', '请先输入绘图描述');
+      addToast('warning', tCanvas('enterDescriptionFirst'));
       return;
     }
 
@@ -1708,7 +1704,7 @@ export default function CanvasPage() {
     setIsDrawing(true);
     setIsThinking(true);
     setIsAppending(appendMode);
-    addToast('info', '正在生成绘图...');
+    addToast('info', tCanvas('generating'));
 
     // 启动预设模板轮播动画
     startPresetAnimation();
@@ -1723,7 +1719,7 @@ export default function CanvasPage() {
       if (similarPrompt) {
         // 使用历史参数
         instructions = JSON.parse(similarPrompt.canvasParams);
-        addToast('info', '找到相似提示词，使用历史结果');
+        addToast('info', tCanvas('reusedHistory'));
       } else {
         // 调用 API 获取新参数
         const response = await fetch('/api/draw', {
@@ -1743,7 +1739,7 @@ export default function CanvasPage() {
 
         if (!response.ok) {
           const errorPayload = await parseJsonSafely(response).catch(() => null) as { error?: string } | null;
-          throw new Error(errorPayload?.error || '绘图生成失败');
+          throw new Error(errorPayload?.error || tCanvas('generationError'));
         }
 
         instructions = await response.json();
@@ -1776,7 +1772,7 @@ export default function CanvasPage() {
       }
 
       setHasUnsavedChanges(true);
-      addToast('success', '绘图完成，记得保存作品');
+      addToast('success', tCanvas('drawComplete'));
 
       // 自动发送到微信
       await sendCanvasToWeChat();
@@ -1784,17 +1780,17 @@ export default function CanvasPage() {
       console.error('Draw error:', error);
       stopPresetAnimation();
       setIsThinking(false);
-      addToast('error', error instanceof Error ? error.message : '绘图失败，请重试');
+      addToast('error', error instanceof Error ? error.message : tCanvas('drawFailed'));
     } finally {
       setIsDrawing(false);
       setIsAppending(false);
     }
-  }, [sessionDescription, canvasState, drawShapes, drawAppendBatch, addToast, startPresetAnimation, stopPresetAnimation, user, sendCanvasToWeChat]);
+  }, [sessionDescription, canvasState, drawShapes, drawAppendBatch, addToast, startPresetAnimation, stopPresetAnimation, user, sendCanvasToWeChat, tCanvas]);
 
   if (!user) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="text-text-secondary animate-pulse">加载中...</div>
+        <div className="text-text-secondary animate-pulse">{tCanvas('loading')}</div>
       </div>
     );
   }
@@ -1831,19 +1827,19 @@ export default function CanvasPage() {
           <button
             onClick={openGallery}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
-            aria-label="打开图库"
+            aria-label={tCanvas('openGallery')}
           >
             <ImageIcon className="w-5 h-5" />
-            <span className="text-sm hidden sm:inline">图库</span>
+            <span className="text-sm hidden sm:inline">{tCanvas('galleryShort')}</span>
           </button>
 
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-sakura-light/20 transition-all"
-            aria-label="登出"
+            aria-label={tCanvas('logout')}
           >
             <LogOut className="w-5 h-5" />
-            <span className="text-sm hidden sm:inline">登出</span>
+            <span className="text-sm hidden sm:inline">{tCanvas('logout')}</span>
           </button>
 
           <div className="flex items-center gap-2 pl-3 border-l border-border">
@@ -1889,7 +1885,7 @@ export default function CanvasPage() {
                 imageRendering: 'crisp-edges'
               }}
               role="img"
-              aria-label="绘图画布 - 通过语音指令控制绘图"
+              aria-label={tCanvas('canvasAriaLabel')}
             />
 
             {/* 预设模板动画覆盖层 - AI 思考时显示 */}
@@ -1923,7 +1919,7 @@ export default function CanvasPage() {
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-text-primary">{presetTemplates[currentPresetIndex].title}</h3>
-                      <p className="text-xs text-text-secondary">灵感示例</p>
+                      <p className="text-xs text-text-secondary">{tCanvas('inspirationExample')}</p>
                     </div>
                   </div>
                   <p className="text-sm text-text-secondary bg-white/60 rounded-xl p-3 italic">
@@ -1942,7 +1938,7 @@ export default function CanvasPage() {
                 </div>
 
                 <p className="mt-4 text-sm text-text-secondary">
-                  正在思考如何绘制你的作品...
+                  {tCanvas('thinkingOverlay')}
                 </p>
               </div>
             )}
@@ -1977,7 +1973,7 @@ export default function CanvasPage() {
             {/* 右上角装饰 - 操作提示 */}
             <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm rounded-xl border border-sakura/10 shadow-sm px-4 py-2">
               <p className="text-xs text-text-secondary">
-                试试说：<span className="text-sakura font-medium">画一个圆形</span>
+                {tCanvas('trySay')} <span className="text-sakura font-medium">{tCanvas('trySayExample')}</span>
               </p>
             </div>
           </div>
@@ -1997,10 +1993,10 @@ export default function CanvasPage() {
                   <RotateCcw className="h-5 w-5" />
                 </button>
                 <button
-                  onClick={() => addToast('info', '重做功能开发中')}
+                  onClick={() => addToast('info', tCanvas('redoDev'))}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-sakura-light/20 hover:text-text-primary"
-                  aria-label="重做"
-                  title="重做"
+                  aria-label={tCanvas('redo')}
+                  title={tCanvas('redo')}
                 >
                   <RotateCw className="h-5 w-5" />
                 </button>
@@ -2008,16 +2004,16 @@ export default function CanvasPage() {
                 <button
                   onClick={handleNewCanvas}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-lavender-light/20 hover:text-lavender"
-                  aria-label="新建画布"
-                  title="新建画布"
+                  aria-label={tCanvas('newCanvas')}
+                  title={tCanvas('newCanvas')}
                 >
                   <FilePlus className="h-5 w-5" />
                 </button>
                 <button
                   onClick={clearCanvas}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-error/10 hover:text-error"
-                  aria-label="清空画布"
-                  title="清空画布"
+                  aria-label={tCanvas('clearCanvas')}
+                  title={tCanvas('clearCanvas')}
                 >
                   <Trash2 className="h-5 w-5" />
                 </button>
@@ -2025,16 +2021,16 @@ export default function CanvasPage() {
                 <button
                   onClick={handleSaveClick}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-mint-light/20 hover:text-mint"
-                  aria-label="保存到图库"
-                  title="保存到图库"
+                  aria-label={tCanvas('saveToGallery')}
+                  title={tCanvas('saveToGallery')}
                 >
                   <Save className="h-5 w-5" />
                 </button>
                 <button
                   onClick={exportPNG}
                   className="rounded-2xl p-3 text-text-secondary transition-all hover:bg-macaron-blue-light/20 hover:text-macaron-blue"
-                  aria-label="导出 PNG"
-                  title="导出 PNG"
+                  aria-label={tCanvas('exportPng')}
+                  title={tCanvas('exportPng')}
                 >
                   <Download className="h-5 w-5" />
                 </button>
@@ -2043,7 +2039,7 @@ export default function CanvasPage() {
               <div className="flex flex-col items-center gap-2">
                 <div className="h-6 w-6 rounded-full border-2 border-white bg-sakura shadow-sm" />
                 <div className="rounded-full bg-sakura-light px-3 py-1 text-[11px] font-semibold text-sakura">
-                  绘图
+                  {tCanvas('drawingMode')}
                 </div>
               </div>
             </div>
@@ -2078,13 +2074,13 @@ export default function CanvasPage() {
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-lavender/20 text-lavender">
                 <Sparkles className="h-4 w-4" />
               </div>
-              <h2 className="text-sm font-semibold text-text-primary">绘图描述</h2>
+              <h2 className="text-sm font-semibold text-text-primary">{tCanvas('descriptionTitle')}</h2>
               {isThinking && (
                 <div
                   ref={thinkingIndicatorRef}
                   className="ml-auto flex items-center gap-2"
                 >
-                  <span className="text-xs text-lavender">AI 正在思考</span>
+                  <span className="text-xs text-lavender">{tCanvas('thinkingBadge')}</span>
                   <div className="flex gap-1">
                     {[0, 1, 2].map((i) => (
                       <div
@@ -2107,12 +2103,12 @@ export default function CanvasPage() {
                 onChange={(event) => setSessionDescription(event.target.value)}
                 placeholder={tCanvas('transcriptPlaceholder')}
                 className="min-h-[56px] w-full resize-none rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-primary outline-none transition-all placeholder:text-text-disabled focus:border-sakura focus:ring-2 focus:ring-sakura/30"
-                aria-label="绘图描述输入框"
+                aria-label={tCanvas('descriptionAriaLabel')}
               />
 
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
-                  <span className="rounded-full bg-sakura-light px-2 py-1 text-sakura">单屏布局</span>
+                  <span className="rounded-full bg-sakura-light px-2 py-1 text-sakura">{tCanvas('singleScreenLayout')}</span>
                   <span>{canvasState.shapes.length > 0 ? tTeaching('appendHint') : tTeaching('speakHint')}</span>
                 </div>
                 <button
@@ -2123,10 +2119,10 @@ export default function CanvasPage() {
                       ? 'bg-lavender text-white shadow-sm hover:bg-lavender/90'
                       : 'cursor-not-allowed bg-text-disabled text-white'
                   }`}
-                  aria-label="开始绘图"
+                  aria-label={tCanvas('startDrawing')}
                 >
                   <Sparkles className={`h-4 w-4 ${isDrawing ? 'animate-spin' : ''}`} />
-                  {isDrawing ? '绘制中...' : '开始绘图'}
+                  {isDrawing ? tCanvas('drawing') : tCanvas('startDrawing')}
                 </button>
               </div>
             </div>

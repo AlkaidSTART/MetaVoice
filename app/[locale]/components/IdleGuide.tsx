@@ -226,7 +226,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
       color: '#FFD43B',
       icon: Star,
     },
-  ] as const;
+  ];
 
   // 初始化入场动画和背景装饰
   useEffect(() => {
@@ -316,7 +316,7 @@ export default function IdleGuide({ visible }: IdleGuideProps) {
         demoCanvasRef,
         timelineRef,
         scenarioIndexRef,
-        demoScenarios as Array<{ transcript: string; shape: string; color: string; icon: typeof Circle }>,
+        demoScenarios,
         {
           ready: tIdleGuide('ready'),
           listening: tIdleGuide('listening'),

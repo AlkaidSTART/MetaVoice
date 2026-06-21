@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { drawInstructionSchema } from "../../lib/draw-schema";
-import { expandIllustrationComponents } from "../../lib/layout/illustration-expander";
-import { normalizeInstructionLayout } from "../../lib/layout/position-normalizer";
-import { getShapeBounds } from "../../lib/layout/shape-bounds";
-import { normalizeInstructionPayload } from "./route";
+import { drawInstructionSchema } from "@lib/draw-schema";
+import { expandIllustrationComponents } from "@lib/layout/illustration-expander";
+import { normalizeInstructionLayout } from "@lib/layout/position-normalizer";
+import { getShapeBounds } from "@lib/layout/shape-bounds";
+import { normalizeInstructionPayload } from "@app/api/draw/route";
 
 describe("normalizeInstructionPayload", () => {
   it("fills polygon x/y from point coordinates", () => {

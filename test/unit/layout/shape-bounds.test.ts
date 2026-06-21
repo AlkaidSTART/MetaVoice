@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { Shape } from "../draw-schema";
-import { getShapeBounds, translateShape } from "./shape-bounds";
+import type { Shape } from "@lib/draw-schema";
+import { getShapeBounds, translateShape } from "@lib/layout/shape-bounds";
 
 describe("shape-bounds", () => {
   it("computes circle bounds from center anchor", () => {

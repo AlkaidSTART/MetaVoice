@@ -5,13 +5,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      "@app": path.resolve(__dirname, "app"),
+      "@lib": path.resolve(__dirname, "app/lib"),
+      "@test": path.resolve(__dirname, "test"),
     },
   },
   test: {
     globals: true,
     environment: "jsdom",
-    setupFiles: ["./tests/setup.ts"],
-    include: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    setupFiles: ["./test/setup.ts"],
+    include: ["test/**/*.test.{ts,tsx}", "test/**/*.spec.{ts,tsx}"],
     exclude: ["node_modules", "dist", ".next"],
     css: true,
     coverage: {
@@ -26,7 +29,7 @@ export default defineConfig({
         "node_modules",
         "dist",
         ".next",
-        "tests",
+        "test",
         "**/*.d.ts",
         "**/*.config.*",
       ],

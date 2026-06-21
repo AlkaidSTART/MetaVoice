@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { DrawInstruction } from "../draw-schema";
-import { expandIllustrationComponents } from "./illustration-expander";
+import type { DrawInstruction } from "@lib/draw-schema";
+import { expandIllustrationComponents } from "@lib/layout/illustration-expander";
 
 describe("expandIllustrationComponents", () => {
   it("expands a sun into multiple child-friendly shapes", () => {

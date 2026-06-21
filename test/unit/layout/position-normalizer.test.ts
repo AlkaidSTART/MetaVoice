@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { DrawInstruction } from "../draw-schema";
-import { normalizeInstructionLayout } from "./position-normalizer";
-import { getShapeBounds } from "./shape-bounds";
+import type { DrawInstruction } from "@lib/draw-schema";
+import { normalizeInstructionLayout } from "@lib/layout/position-normalizer";
+import { getShapeBounds } from "@lib/layout/shape-bounds";
 
 describe("normalizeInstructionLayout", () => {
   it("clamps out-of-bounds shapes into the canvas", () => {

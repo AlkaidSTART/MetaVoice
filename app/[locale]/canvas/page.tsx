@@ -29,8 +29,11 @@ import {
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authDB, artworkDB, promptHistoryDB, Artwork } from '../lib/db';
+import { authDB, artworkDB, Artwork } from '../lib/db';
 import type { User as UserType } from '../lib/db';
+import { findSimilarPrompt, savePromptHistory } from '@/lib/api/prompts';
+import { createClient } from '@/lib/supabase/client';
+import { fetchUserArtworks, saveArtworkViaApi, deleteArtworkViaApi } from '@/lib/api/artworks';
 import { DrawInstruction, Shape } from '../lib/draw-schema';
 import {
   AddBatchHistoryEntry,
@@ -207,12 +210,23 @@ export default function CanvasPage() {
   // 加载用户信息并验证登录状态
   useEffect(() => {
     const loadUser = async () => {
-      const currentUser = await authDB.getCurrentUser();
-      if (!currentUser) {
+      const supabase = createClient();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
         router.push('/login');
         return;
       }
-      setUser(currentUser);
+      
+      setUser({
+        id: user.id,
+        email: user.email || '',
+        name: user.user_metadata?.name || user.email?.split('@')[0] || '用户',
+        password: '', // 不需要密码
+        avatar: user.user_metadata?.avatar_url,
+        createdAt: new Date(user.created_at),
+        updatedAt: new Date(user.updated_at || user.created_at),
+      });
     };
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -224,10 +238,19 @@ export default function CanvasPage() {
 
     const loadArtwork = async () => {
       try {
-        const artwork = await artworkDB.getByUserId(user.id);
-        const targetArtwork = artwork.find(a => a.id === editArtworkId);
-        if (targetArtwork) {
-          await loadArtworkForEdit(targetArtwork);
+        const data = await fetchUserArtworks();
+        const targetArtwork = data.artworks.find(a => a.id === editArtworkId);
+        if (targetArtwork && targetArtwork.canvas_json) {
+          const artworkData: Artwork = {
+            id: targetArtwork.id,
+            userId: targetArtwork.user_id,
+            title: targetArtwork.title,
+            thumbnail: targetArtwork.thumbnail_url || '',
+            canvasData: targetArtwork.canvas_json,
+            createdAt: new Date(targetArtwork.created_at),
+            updatedAt: new Date(targetArtwork.updated_at),
+          };
+          await loadArtworkForEdit(artworkData);
         }
       } catch (error) {
         console.error('加载作品失败:', error);
@@ -371,7 +394,8 @@ export default function CanvasPage() {
   }, []);
 
   const handleLogout = useCallback(async () => {
-    await authDB.logout();
+    const supabase = createClient();
+    await supabase.auth.signOut();
     router.push('/login');
   }, [router]);
 
@@ -1472,20 +1496,17 @@ export default function CanvasPage() {
       const thumbnail = canvas.toDataURL('image/png');
       const canvasData = serializeState(canvasState);
 
-      if (currentArtworkId) {
-        await artworkDB.update(currentArtworkId, {
-          title,
-          thumbnail,
-          canvasData,
-        });
-      } else {
-        const savedArtwork = await artworkDB.save({
-          userId: user?.id || 'guest',
-          title,
-          thumbnail,
-          canvasData,
-        });
-        setCurrentArtworkId(savedArtwork.id);
+      const response = await saveArtworkViaApi({
+        id: currentArtworkId,
+        title,
+        canvasJson: canvasData,
+        thumbnailDataUrl: thumbnail,
+        tags: ['Canvas'],
+        isPublic: false,
+      });
+
+      if (response?.artwork) {
+        setCurrentArtworkId(response.artwork.id);
       }
 
       setSaveModalOpen(false);
@@ -1495,7 +1516,7 @@ export default function CanvasPage() {
       console.error('保存失败:', error);
       addToast('error', tCanvas('saveFailed'));
     }
-  }, [canvasRef, canvasState, currentArtworkId, user, addToast, tCanvas]);
+  }, [canvasRef, canvasState, currentArtworkId, addToast, tCanvas]);
 
   // 新建画布（自动保存当前作品）
   const handleNewCanvas = useCallback(async () => {
@@ -1508,20 +1529,15 @@ export default function CanvasPage() {
           const canvasData = serializeState(canvasState);
           const defaultTitle = sessionDescription.substring(0, 30) || tCanvas('saveUntitled');
 
-          if (currentArtworkId) {
-            await artworkDB.update(currentArtworkId, {
-              title: defaultTitle,
-              thumbnail,
-              canvasData,
-            });
-          } else {
-            await artworkDB.save({
-              userId: user?.id || 'guest',
-              title: defaultTitle,
-              thumbnail,
-              canvasData,
-            });
-          }
+          await saveArtworkViaApi({
+            id: currentArtworkId,
+            title: defaultTitle,
+            canvasJson: canvasData,
+            thumbnailDataUrl: thumbnail,
+            tags: ['Canvas'],
+            isPublic: false,
+          });
+          
           addToast('info', tCanvas('autoSaved'));
         } catch (error) {
           console.error('自动保存失败:', error);
@@ -1712,13 +1728,13 @@ export default function CanvasPage() {
     try {
       // 尝试查找相似提示词（阈值 0.9：仅几乎完全相同的指令才复用模板，秒级出图）
       const userId = user?.id || null;
-      const similarPrompt = await promptHistoryDB.findSimilar(sessionDescription, userId, 0.9);
+      const similarPromptResult = await findSimilarPrompt(sessionDescription, 0.9);
       
       let instructions: DrawInstruction;
       
-      if (similarPrompt) {
+      if (similarPromptResult.matched && similarPromptResult.history) {
         // 使用历史参数
-        instructions = JSON.parse(similarPrompt.canvasParams);
+        instructions = JSON.parse(similarPromptResult.history.canvasParams);
         addToast('info', tCanvas('reusedHistory'));
       } else {
         // 调用 API 获取新参数
@@ -1745,7 +1761,7 @@ export default function CanvasPage() {
         instructions = await response.json();
 
         // 保存新的提示词和参数到数据库
-        await promptHistoryDB.save(sessionDescription, instructions, userId);
+        await savePromptHistory(sessionDescription, instructions);
       }
 
       // 停止预设动画

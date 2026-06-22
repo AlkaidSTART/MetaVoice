@@ -15,13 +15,22 @@ import {
   Edit3,
 } from "lucide-react";
 import gsap from "gsap";
-import { authDB, artworkDB, Artwork, User as UserType } from "../lib/db";
+import { createClient } from "@/lib/supabase/client";
+import { fetchUserArtworks, deleteArtworkViaApi } from "@/lib/api/artworks";
+import type { ArtworkRecord } from "@/lib/supabase/db";
 import PortfolioExportModal from "../components/PortfolioExportModal";
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
 
 export default function GalleryPage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserType | null>(null);
-  const [artworks, setArtworks] = useState<Artwork[]>([]);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -32,14 +41,14 @@ export default function GalleryPage() {
   const selectionBarRef = useRef<HTMLDivElement>(null);
 
   // 加载作品列表
-  const loadArtworks = async (userId: string) => {
+  const loadArtworks = async () => {
     try {
-      const userArtworks = await artworkDB.getByUserId(userId);
+      const data = await fetchUserArtworks();
       // 按创建时间倒序排列
-      userArtworks.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      const sortedArtworks = data.artworks.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-      setArtworks(userArtworks);
+      setArtworks(sortedArtworks);
     } catch (error) {
       console.error("加载作品失败:", error);
     } finally {
@@ -50,12 +59,19 @@ export default function GalleryPage() {
   // 检查用户登录状态
   useEffect(() => {
     const checkAuth = async () => {
-      const currentUser = await authDB.getCurrentUser();
-      if (!currentUser) {
+      const supabase = createClient();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
         router.push("/login");
       } else {
-        setUser(currentUser);
-        loadArtworks(currentUser.id);
+        setUser({
+          id: user.id,
+          name: user.user_metadata?.name || user.email?.split('@')[0] || '用户',
+          email: user.email || '',
+          avatar: user.user_metadata?.avatar_url,
+        });
+        loadArtworks();
       }
     };
     checkAuth();
@@ -94,16 +110,17 @@ export default function GalleryPage() {
 
   // 处理登出
   const handleLogout = async () => {
-    await authDB.logout();
+    const supabase = createClient();
+    await supabase.auth.signOut();
     router.push("/login");
   };
 
   // 下载作品
-  const handleDownload = (artwork: Artwork) => {
+  const handleDownload = (artwork: ArtworkRecord) => {
     try {
       const link = document.createElement("a");
       link.download = `${artwork.title}.png`;
-      link.href = artwork.thumbnail;
+      link.href = artwork.thumbnail_url || '';
       link.click();
     } catch (error) {
       console.error("下载失败:", error);
@@ -113,7 +130,7 @@ export default function GalleryPage() {
   // 删除作品
   const handleDelete = async (artworkId: string) => {
     try {
-      await artworkDB.delete(artworkId);
+      await deleteArtworkViaApi(artworkId);
       setArtworks(artworks.filter(a => a.id !== artworkId));
     } catch (error) {
       console.error("删除失败:", error);
@@ -126,7 +143,7 @@ export default function GalleryPage() {
   };
 
   // 编辑作品（二次创作）
-  const handleEdit = (artwork: Artwork) => {
+  const handleEdit = (artwork: ArtworkRecord) => {
     router.push(`/canvas?edit=${artwork.id}`);
   };
 
@@ -163,7 +180,7 @@ export default function GalleryPage() {
   const handleBatchDelete = async () => {
     try {
       for (const id of selectedIds) {
-        await artworkDB.delete(id);
+        await deleteArtworkViaApi(id);
       }
       setArtworks(artworks.filter((a) => !selectedIds.has(a.id)));
       setSelectedIds(new Set());
@@ -374,7 +391,7 @@ export default function GalleryPage() {
                     )}
 
                     <img
-                      src={artwork.thumbnail}
+                      src={artwork.thumbnail_url || ''}
                       alt={artwork.title}
                       className={`w-full h-full object-cover ${
                         selectionMode ? "cursor-pointer" : ""
@@ -423,7 +440,7 @@ export default function GalleryPage() {
                       {artwork.title}
                     </h3>
                     <p className="text-xs text-text-secondary mt-1">
-                      {new Date(artwork.createdAt).toLocaleDateString("zh-CN", {
+                      {new Date(artwork.created_at).toLocaleDateString("zh-CN", {
                         year: "numeric",
                         month: "long",
                         day: "numeric",

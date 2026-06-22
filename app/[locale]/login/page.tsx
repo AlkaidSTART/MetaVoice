@@ -16,7 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import gsap from "gsap";
-import { authDB } from "../lib/db";
+import { createClient } from "@/lib/supabase/client";
 
 /* ============================================
    Config
@@ -458,12 +458,30 @@ export default function LoginPage() {
     }
 
     try {
+      const supabase = createClient();
+      
       if (isLogin) {
-        await authDB.login(formData.email, formData.password);
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+        
+        if (error) throw error;
         router.push("/canvas");
       } else {
         if (!formData.name.trim()) throw new Error("请输入用户名");
-        await authDB.register(formData.email, formData.password, formData.name);
+        
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              name: formData.name,
+            },
+          },
+        });
+        
+        if (error) throw error;
         router.push("/canvas");
       }
     } catch (err) {

@@ -3,19 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Download, Check } from "lucide-react";
 import gsap from "gsap";
-
-interface Artwork {
-  id: string;
-  userId: string;
-  title: string;
-  thumbnail: string;
-  canvasData: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { ArtworkRecord } from "@/lib/supabase/db";
 
 interface PortfolioExportModalProps {
-  artworks: Artwork[];
+  artworks: ArtworkRecord[];
   onClose: () => void;
 }
 

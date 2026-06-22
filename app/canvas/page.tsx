@@ -691,56 +691,58 @@ function CanvasContent() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 z-10 select-none">
-            <TranscriptBar
-              transcript={transcript}
-              interimTranscript={interimTranscript}
-              voiceState={voiceState}
-              error={voiceError}
-            />
-
-            {/* 确认/取消按钮：voiceState === "ready" 时展示 */}
-            {voiceState === "ready" && transcript.trim() && (
-              <div className="flex items-center justify-center gap-3 py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <button
-                  type="button"
-                  onClick={cancelTranscript}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-white border border-border-custom text-text-secondary hover:bg-gray-50 transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmTranscript}
-                  className="px-5 py-2 text-sm font-bold rounded-lg bg-sakura text-white hover:bg-sakura/90 transition-colors shadow-sm"
-                >
-                  确认执行
-                </button>
+          {/* 右下角悬浮语音控制面板 */}
+            <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-3 select-none">
+              {/* TranscriptBar 悬浮显示 */}
+              <div className="w-80 max-w-[calc(100vw-2rem)]">
+                <TranscriptBar
+                  transcript={transcript}
+                  interimTranscript={interimTranscript}
+                  voiceState={voiceState}
+                  error={voiceError}
+                />
               </div>
-            )}
 
-            <div
-              className="h-[96px] flex flex-col items-center justify-center relative"
-              data-action="mic"
-            >
-              <MicButton
-                state={micState}
-                onClick={handleMicTrigger}
-                disabled={voiceState === "processing" || credits < 1}
-              />
-              <span className="text-[10px] font-bold text-text-disabled mt-1 text-center">
-                {credits < 1
-                  ? "积分不足，无法继续录音"
-                  : voiceState === "listening"
-                    ? "正在实时转写，说完后再次点击按钮结束"
-                    : voiceState === "ready"
-                      ? "请先确认识别文字，再进入下一步"
-                      : voiceState === "processing"
-                        ? "已确认，正在进入下一步流程"
-                    : "点击按钮开始说话"}
-              </span>
+              {/* 确认/取消按钮：voiceState === "ready" 时展示 */}
+              {voiceState === "ready" && transcript.trim() && (
+                <div className="flex items-center gap-2 bg-white border border-border-custom rounded-2xl p-2 shadow-lg animate-in fade-in zoom-in-95 duration-200">
+                  <button
+                    type="button"
+                    onClick={cancelTranscript}
+                    className="px-4 py-2 text-sm font-medium rounded-xl bg-surface border border-border-custom text-text-secondary hover:bg-[#FFF0EF] hover:border-[#FFBDB8] hover:text-[#D04D43] transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmTranscript}
+                    className="px-5 py-2 text-sm font-bold rounded-xl bg-sakura text-white hover:bg-sakura/90 transition-colors shadow-sm"
+                  >
+                    确认执行
+                  </button>
+                </div>
+              )}
+
+              {/* 麦克风按钮 */}
+              <div className="flex flex-col items-center gap-1">
+                <MicButton
+                  state={micState}
+                  onClick={handleMicTrigger}
+                  disabled={voiceState === "processing" || credits < 1}
+                />
+                <span className="text-[10px] font-bold text-text-disabled text-center bg-white/80 backdrop-blur px-2 py-0.5 rounded-full">
+                  {credits < 1
+                    ? "积分不足"
+                    : voiceState === "listening"
+                      ? "点击结束"
+                      : voiceState === "ready"
+                        ? "确认后执行"
+                        : voiceState === "processing"
+                          ? "处理中..."
+                          : "点击说话"}
+                </span>
+              </div>
             </div>
-          </div>
         </main>
       </div>
     </div>

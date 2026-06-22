@@ -76,5 +76,4 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Skip environment variables validation during CI build
           NEXT_SKIP_ENV_VALIDATION: '1'

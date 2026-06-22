@@ -224,5 +224,26 @@ VoiceCanvas 已具备完整 MVP 功能，但代码组织处于"双轨并行"状�
 
 ---
 
+## 7. 本次已直接执行的优化
+
+为提升稳定性与减少 lint noise，已直接修改以下文件（均通过 `npm run build` 与 `npm run lint` 验证）：
+
+| 文件 | 修改内容 | 优化维度 |
+|---|---|---|
+| `app/globals.css` | `body` 背景色/文字色改用 `--color-surface` / `--color-text-primary`，替换裸 HEX | 复用性 |
+| `app/login/page.tsx` | 移除未使用的 `data` 变量（`signInWithPassword` / `signUp`） | 稳定性/简洁性 |
+| `app/[locale]/login/page.tsx` | 同上 | 稳定性/简洁性 |
+| `app/api/voice/transcribe/route.ts` | 删除未使用的 `localParsed` 与 `parseTranscript` 导入 | 稳定性/简洁性 |
+| `app/gallery/page.tsx` | 将 `loadData` 移入 `useEffect` 并补齐 `router` 依赖，消除 hooks 警告 | 稳定性 |
+| `app/square/page.tsx` | 将 lucide `Image` 重命名为 `ImageIcon`，消除 `jsx-a11y/alt-text` 误报 | 稳定性 |
+| `app/canvas/page.tsx` | `addToast` 用 `useCallback` 包裹；语音指令 handler 改用 ref 指向最新 `processTranscript`，减少 effect 重注册 | 稳定性 |
+| `lib/voice/useVoiceCommand.ts` | 移除 `handleCommand` 中未使用的依赖 `onControl`/`onAIGenerate`/`onUnknown` | 稳定性 |
+
+**lint warning 数量：49 → 39**（0 errors）。
+
+> 说明：本次未进行大规模重构（如删除重复路由/组件、拆分超大画布页），因为这些变更涉及产品决策与功能取舍，建议在确认"以 `app/[locale]/` 为唯一真相源"后再执行。
+
+---
+
 *报告生成人：代码评审 Agent*  
 *生成时间：2026-06-22*

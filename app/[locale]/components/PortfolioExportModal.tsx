@@ -70,7 +70,7 @@ export default function PortfolioExportModal({
               img.crossOrigin = "anonymous";
               img.onload = () => resolve(img);
               img.onerror = reject;
-              img.src = artwork.thumbnail;
+              img.src = artwork.thumbnail_url || '';
             })
         )
       );
@@ -264,7 +264,7 @@ export default function PortfolioExportModal({
               >
                 <div className="relative">
                   <img
-                    src={artwork.thumbnail}
+                    src={artwork.thumbnail_url || ''}
                     alt={artwork.title}
                     className="w-full h-auto"
                   />

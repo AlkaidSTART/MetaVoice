@@ -37,7 +37,6 @@ import {
 } from "@/lib/api/voice";
 import { sendEmail } from "@/lib/api/email";
 import { createClient } from "@/lib/supabase/client";
-import { saveArtwork, downloadDataUrl } from "@/lib/db/artworkStore";
 
 interface UserProfile {
   id: string;
@@ -369,15 +368,13 @@ function CanvasContent() {
       // 获取 canvas 当前 PNG
       const dataUrl = canvasRef.current?.exportImage();
       if (dataUrl) {
-        // 保存到 IndexedDB
-        await saveArtwork({
-          title: artworkTitle,
-          dataUrl,
-          canvasJson: JSON.stringify(canvasRef.current?.getShapesData() ?? []),
-          type: "ai_generate",
-        });
         // 自动下载
-        downloadDataUrl(dataUrl, `${artworkTitle || "voicecanvas"}.png`);
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `${artworkTitle || "voicecanvas"}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
 
         // 自动发送邮件
         if (user?.email) {

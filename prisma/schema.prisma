@@ -64,3 +64,21 @@ model EmailLog {
   @@index([userId])
   @@map("email_logs")
 }
+
+// Prompt history for voice commands
+model PromptHistory {
+  id              String   @id @default(uuid())
+  userId          String?  @map("user_id")
+  prompt          String
+  canvasParams    String   @map("canvas_params")
+  similarityScore Float    @default(0) @map("similarity_score")
+  usageCount      Int      @default(1) @map("usage_count")
+  isTemplate      Boolean  @default(false) @map("is_template")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([prompt])
+  @@index([usageCount])
+  @@map("prompt_history")
+}

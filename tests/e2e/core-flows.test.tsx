@@ -8,16 +8,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  render,
-  screen,
-} from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { NextRequest } from "next/server";
 
 // ── Speech Recognition: parseTranscript ──────────────────────────
-import {
-  parseTranscript,
-} from "@/lib/voice/speechRecognition";
+import { parseTranscript } from "@/lib/voice/speechRecognition";
 
 describe("parseTranscript — NLP Command Parser", () => {
   /* ── Canvas Drawing Commands ── */
@@ -228,9 +224,13 @@ import { POST as transcribePost } from "@/app/api/voice/transcribe/route";
 import { POST as intentPost } from "@/app/api/intent/analyze/route";
 import { POST as imagePost } from "@/app/api/image/generate/route";
 
+function createNextRequest(input: RequestInfo | URL, init?: RequestInit): NextRequest {
+  return new Request(input, init) as unknown as NextRequest;
+}
+
 describe("API: POST /api/voice/transcribe", () => {
   it("returns error when no audio file", async () => {
-    const req = new Request("http://localhost/api/voice/transcribe", {
+    const req = createNextRequest("http://localhost/api/voice/transcribe", {
       method: "POST",
     });
     const res = await transcribePost(req);
@@ -245,7 +245,7 @@ describe("API: POST /api/voice/transcribe", () => {
     const formData = new FormData();
     formData.set("audio", file);
 
-    const req = new Request("http://localhost/api/voice/transcribe", {
+    const req = createNextRequest("http://localhost/api/voice/transcribe", {
       method: "POST",
       body: formData,
     });
@@ -263,7 +263,7 @@ describe("API: POST /api/voice/transcribe", () => {
 
 describe("API: POST /api/intent/analyze", () => {
   it("returns 400 when no transcript provided", async () => {
-    const req = new Request("http://localhost/api/intent/analyze", {
+    const req = createNextRequest("http://localhost/api/intent/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -275,7 +275,7 @@ describe("API: POST /api/intent/analyze", () => {
   });
 
   it("returns mock canvas intent when DASHSCOPE_API_KEY is not set", async () => {
-    const req = new Request("http://localhost/api/intent/analyze", {
+    const req = createNextRequest("http://localhost/api/intent/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transcript: "画一个红色的圆形" }),
@@ -290,7 +290,7 @@ describe("API: POST /api/intent/analyze", () => {
 
   it("handles long transcript gracefully", async () => {
     const longText = "画一个".repeat(50);
-    const req = new Request("http://localhost/api/intent/analyze", {
+    const req = createNextRequest("http://localhost/api/intent/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transcript: longText }),
@@ -302,7 +302,7 @@ describe("API: POST /api/intent/analyze", () => {
 
 describe("API: POST /api/image/generate", () => {
   it("returns 400 when no prompt provided", async () => {
-    const req = new Request("http://localhost/api/image/generate", {
+    const req = createNextRequest("http://localhost/api/image/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -314,7 +314,7 @@ describe("API: POST /api/image/generate", () => {
   });
 
   it("returns mock image URL when DASHSCOPE_API_KEY is not set", async () => {
-    const req = new Request("http://localhost/api/image/generate", {
+    const req = createNextRequest("http://localhost/api/image/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -335,7 +335,7 @@ describe("API: POST /api/image/generate", () => {
 });
 
 // ── CanvasBoard Component ────────────────────────────────────────
-import CanvasBoard from "@/components/canvas/CanvasBoard";
+import CanvasBoard, { CanvasBoardRef } from "@/components/canvas/CanvasBoard";
 
 describe("CanvasBoard Component", () => {
   it("renders without crashing", () => {
@@ -371,7 +371,7 @@ describe("CanvasBoard Component", () => {
   });
 
   it("exposes ref methods", () => {
-    const ref = { current: null };
+    const ref = { current: null as CanvasBoardRef | null };
     render(<CanvasBoard ref={ref} />);
     expect(ref.current).not.toBeNull();
     expect(ref.current?.undo).toBeDefined();
@@ -382,7 +382,7 @@ describe("CanvasBoard Component", () => {
   });
 
   it("undo/redo work correctly", () => {
-    const ref = { current: null };
+    const ref = { current: null as CanvasBoardRef | null };
     render(<CanvasBoard ref={ref} />);
 
     const status = ref.current!.getHistoryStatus();
@@ -395,7 +395,7 @@ describe("CanvasBoard Component", () => {
   });
 
   it("exportImage is callable on ref", () => {
-    const ref = { current: null };
+    const ref = { current: null as CanvasBoardRef | null };
     render(<CanvasBoard ref={ref} />);
     expect(ref.current).not.toBeNull();
     // exportImage is a function on the ref
@@ -403,7 +403,7 @@ describe("CanvasBoard Component", () => {
   });
 
   it("addShape resolves and creates non-filled default shapes", async () => {
-    const ref = { current: null as null | CanvasBoardRef };
+    const ref = { current: null as CanvasBoardRef | null };
     render(<CanvasBoard ref={ref} />);
     const shape = await ref.current!.addShape("circle", undefined, "center", "medium");
     expect(shape?.fill).toBe(false);

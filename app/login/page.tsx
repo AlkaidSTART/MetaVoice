@@ -461,17 +461,17 @@ export default function LoginPage() {
       const supabase = createClient();
       
       if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
-        
+
         if (error) throw error;
         router.push("/canvas");
       } else {
         if (!formData.name.trim()) throw new Error("请输入用户名");
-        
-        const { data, error } = await supabase.auth.signUp({
+
+        const { error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -480,7 +480,7 @@ export default function LoginPage() {
             },
           },
         });
-        
+
         if (error) throw error;
         router.push("/canvas");
       }

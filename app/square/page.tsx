@@ -6,7 +6,7 @@ import {
   Globe,
   Download,
   Sparkles,
-  Image,
+  Image as ImageIcon,
   Users,
   Clock,
   ChevronLeft,
@@ -97,7 +97,7 @@ export default function SquarePage() {
           data-action="nav-gallery"
           className="flex items-center gap-1.5 px-3 py-1.5 border border-border-custom hover:border-sakura hover:bg-[#FFEAEF]/40 text-text-secondary hover:text-[#B3455C] rounded-xl text-xs font-bold transition-all cursor-pointer"
         >
-          <Image className="w-3.5 h-3.5" />
+          <ImageIcon className="w-3.5 h-3.5" />
           <span>我的画廊</span>
         </button>
       </header>
@@ -202,7 +202,7 @@ export default function SquarePage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-text-disabled">
-                        <Image className="w-10 h-10" />
+                        <ImageIcon className="w-10 h-10" />
                       </div>
                     )}
 

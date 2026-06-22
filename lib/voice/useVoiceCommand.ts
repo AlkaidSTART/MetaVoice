@@ -65,7 +65,7 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
     // 指令分发由 canvas/page.tsx 的 processTranscript 处理
     // 此 hook 仅用于全局 UI 操作
     onDraw?.(command);
-  }, [autoExecuteUI, onDraw, onControl, onAIGenerate, onUnknown]);
+  }, [autoExecuteUI, onDraw]);
 
   // 注册指令处理器
   useEffect(() => {

@@ -22,27 +22,27 @@ export default function GalleryPage() {
   const [avatarUrl, setAvatarUrl] = useState<string>("");
   const gridRef = useRef<HTMLDivElement>(null);
 
-  async function loadData() {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  useEffect(() => {
+    async function loadData() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      router.push("/login");
-      return;
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      setUserName(
+        user.user_metadata?.name || user.email?.split("@")[0] || "用户",
+      );
+      setAvatarUrl(user.user_metadata?.avatar_url || "");
+
+      const data = await fetchUserArtworks();
+      setArtworks(data.artworks);
     }
 
-    setUserName(
-      user.user_metadata?.name || user.email?.split("@")[0] || "用户",
-    );
-    setAvatarUrl(user.user_metadata?.avatar_url || "");
-
-    const data = await fetchUserArtworks();
-    setArtworks(data.artworks);
-  }
-
-  useEffect(() => {
     const timer = window.setTimeout(() => {
       const run = async () => {
         await loadData();
@@ -50,7 +50,7 @@ export default function GalleryPage() {
       void run();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   // GSAP Stagger Entrance
   useEffect(() => {

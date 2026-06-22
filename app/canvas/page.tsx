@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState, useTransition } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
@@ -93,10 +93,10 @@ function CanvasContent() {
           ? "error"
           : "idle";
 
-  const addToast = (message: string, type: ToastType = "info") => {
+  const addToast = useCallback((message: string, type: ToastType = "info") => {
     const id = `toast_${Math.random().toString(36).slice(2, 9)}`;
     setToasts((prev) => [...prev, { id, type, message }]);
-  };
+  }, []);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -424,14 +424,19 @@ function CanvasContent() {
     }
   };
 
-  // 注册语音指令处理器
+  // 注册语音指令处理器：使用 ref 指向最新回调，避免 processTranscript 依赖链导致 effect 重注册
+  const processTranscriptRef = useRef(processTranscript);
+  useEffect(() => {
+    processTranscriptRef.current = processTranscript;
+  }, [processTranscript]);
+
   useEffect(() => {
     const handleCommand = async (command: VoiceCommand) => {
-      await processTranscript(command.raw);
+      await processTranscriptRef.current(command.raw);
     };
 
     return registerCommandHandler(handleCommand);
-  }, [registerCommandHandler, processTranscript]);
+  }, [registerCommandHandler]);
 
   const handleMicTrigger = async () => {
     if (voiceState === "listening") {

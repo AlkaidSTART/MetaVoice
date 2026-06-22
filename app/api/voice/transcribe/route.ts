@@ -106,7 +106,6 @@ export async function POST(req: NextRequest) {
 
     // 如果没有配置 DashScope API Key，使用本地解析器
     if (!getDashScopeApiKey()) {
-      const localParsed = parseTranscript("画一个红色圆形");
       const charged = await chargeCredits(user.id, 1);
       return NextResponse.json({
         transcript: "画一个红色圆形",

@@ -9,7 +9,7 @@ import {
 
 export async function GET(
   _request: NextRequest,
-  context: RouteContext<"/api/artworks/[id]">,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params;
@@ -32,7 +32,7 @@ export async function GET(
 
 export async function DELETE(
   _request: NextRequest,
-  context: RouteContext<"/api/artworks/[id]">,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const user = await requireApiUser();

@@ -4,7 +4,7 @@ import { requireApiUser } from "@/lib/api/auth";
 import { chargeCredits, getUserCredits } from "@/lib/api/credits";
 import { getDashScopeApiKey, getOptionalEnv } from "@/lib/api/config";
 import { transcribeWithQwenASR } from "@/lib/dashscope/asr";
-import { parseTranscript } from "@/lib/voice/speechRecognition";
+
 
 // =============== 讯飞 WebSocket 相关 ===============
 
@@ -114,7 +114,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 使用 qwen3-asr-flash 模型进行语音识别
     const data = await transcribeWithQwenASR(audioFile);
     const charged = await chargeCredits(user.id, 1);
     return NextResponse.json({

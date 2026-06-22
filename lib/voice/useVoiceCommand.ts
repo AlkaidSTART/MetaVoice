@@ -34,13 +34,7 @@ export interface UseVoiceCommandOptions {
  * ```
  */
 export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
-  const {
-    onDraw,
-    onControl,
-    onAIGenerate,
-    onUnknown,
-    autoExecuteUI = true,
-  } = options;
+  const { onDraw, autoExecuteUI = true } = options;
 
   const { registerCommandHandler, state, transcript, error } = useVoiceContext();
   const lastCommandRef = useRef<VoiceCommand | null>(null);

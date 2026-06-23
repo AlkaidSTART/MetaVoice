@@ -1812,7 +1812,7 @@ export default function CanvasPage() {
   }
 
   return (
-      <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-bg via-sakura-light/5 to-macaron-blue-light/5">
+      <div className="flex min-h-screen flex-col overflow-y-auto bg-gradient-to-br from-bg via-sakura-light/5 to-macaron-blue-light/5">
       {/* Toast 通知区域 */}
       <div className="fixed top-4 right-4 z-[300] space-y-2">
         {toasts.map((toast) => (
@@ -1870,7 +1870,7 @@ export default function CanvasPage() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 min-h-0 overflow-hidden px-3 pb-3 pt-3">
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 pt-3">
         <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-3 overflow-hidden">
           {/* Workspace */}
           <div className="flex min-h-0 flex-1 items-center gap-3 overflow-hidden">

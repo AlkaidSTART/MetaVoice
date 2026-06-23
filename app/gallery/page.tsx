@@ -117,7 +117,7 @@ export default function GalleryPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-surface font-sans select-none h-full overflow-hidden">
+    <div className="flex-1 flex min-h-screen flex-col bg-surface font-sans select-none overflow-y-auto">
       {/* Header */}
       <header className="h-[56px] bg-white border-b border-border-custom px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-sm">
         <button

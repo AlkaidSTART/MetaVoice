@@ -464,7 +464,7 @@ function CanvasContent() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-surface font-sans h-screen select-none overflow-hidden relative">
+    <div className="flex-1 flex min-h-screen flex-col bg-surface font-sans select-none overflow-y-auto relative">
       <ToastContainer toasts={toasts} onClose={removeToast} />
 
       <IntentModal

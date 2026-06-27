@@ -1,7 +1,7 @@
 import type { Segment, Shape } from "../draw-schema";
 
-export const CANVAS_WIDTH = 960;
-export const CANVAS_HEIGHT = 720;
+export const CANVAS_WIDTH = 480;
+export const CANVAS_HEIGHT = 360;
 
 export interface Bounds {
   minX: number;
@@ -14,7 +14,12 @@ export interface Bounds {
   cy: number;
 }
 
-function toBounds(minX: number, minY: number, maxX: number, maxY: number): Bounds {
+function toBounds(
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): Bounds {
   return {
     minX,
     minY,
@@ -39,7 +44,10 @@ function getRectTopLeft(shape: Shape, width: number, height: number) {
   }
 }
 
-function getPointBounds(points: Array<{ x: number; y: number }>, fallback: { x: number; y: number }): Bounds {
+function getPointBounds(
+  points: Array<{ x: number; y: number }>,
+  fallback: { x: number; y: number },
+): Bounds {
   if (points.length === 0) {
     return toBounds(fallback.x, fallback.y, fallback.x, fallback.y);
   }
@@ -76,9 +84,12 @@ function getPolygonPoints(shape: Shape) {
 function getSegmentPoints(segments: Segment[] | undefined) {
   const result: Array<{ x: number; y: number }> = [];
   for (const segment of segments || []) {
-    if (segment.x != null && segment.y != null) result.push({ x: segment.x, y: segment.y });
-    if (segment.x1 != null && segment.y1 != null) result.push({ x: segment.x1, y: segment.y1 });
-    if (segment.x2 != null && segment.y2 != null) result.push({ x: segment.x2, y: segment.y2 });
+    if (segment.x != null && segment.y != null)
+      result.push({ x: segment.x, y: segment.y });
+    if (segment.x1 != null && segment.y1 != null)
+      result.push({ x: segment.x1, y: segment.y1 });
+    if (segment.x2 != null && segment.y2 != null)
+      result.push({ x: segment.x2, y: segment.y2 });
   }
   return result;
 }
@@ -87,36 +98,111 @@ export function getShapeBounds(shape: Shape): Bounds {
   switch (shape.type) {
     case "circle": {
       const radius = shape.radius ?? 50;
-      return toBounds(shape.x - radius, shape.y - radius, shape.x + radius, shape.y + radius);
+      const anchor = shape.anchor || "top-left";
+      let cx: number, cy: number;
+      if (anchor === "center") {
+        cx = shape.x;
+        cy = shape.y;
+      } else if (anchor === "bottom-right") {
+        cx = shape.x - radius;
+        cy = shape.y - radius;
+      } else {
+        cx = shape.x + radius;
+        cy = shape.y + radius;
+      }
+      return toBounds(cx - radius, cy - radius, cx + radius, cy + radius);
     }
     case "ellipse": {
       const rx = shape.rx ?? 60;
       const ry = shape.ry ?? 40;
-      return toBounds(shape.x - rx, shape.y - ry, shape.x + rx, shape.y + ry);
+      const anchor = shape.anchor || "top-left";
+      let cx: number, cy: number;
+      if (anchor === "center") {
+        cx = shape.x;
+        cy = shape.y;
+      } else if (anchor === "bottom-right") {
+        cx = shape.x - rx;
+        cy = shape.y - ry;
+      } else {
+        cx = shape.x + rx;
+        cy = shape.y + ry;
+      }
+      return toBounds(cx - rx, cy - ry, cx + rx, cy + ry);
     }
     case "rectangle":
     case "triangle": {
       const width = shape.width ?? 120;
       const height = shape.height ?? 100;
       const topLeft = getRectTopLeft(shape, width, height);
-      return toBounds(topLeft.x, topLeft.y, topLeft.x + width, topLeft.y + height);
+      return toBounds(
+        topLeft.x,
+        topLeft.y,
+        topLeft.x + width,
+        topLeft.y + height,
+      );
     }
     case "text": {
       const fontSize = shape.fontSize ?? 28;
-      const textWidth = Math.max(fontSize, (shape.text?.length || 1) * fontSize * 0.65);
+      const textWidth = Math.max(
+        fontSize,
+        (shape.text?.length || 1) * fontSize * 0.65,
+      );
       const textHeight = fontSize * 1.2;
       const topLeft = getRectTopLeft(shape, textWidth, textHeight);
-      return toBounds(topLeft.x, topLeft.y, topLeft.x + textWidth, topLeft.y + textHeight);
+      return toBounds(
+        topLeft.x,
+        topLeft.y,
+        topLeft.x + textWidth,
+        topLeft.y + textHeight,
+      );
     }
     case "line": {
       const x2 = shape.x2 ?? shape.x + 100;
       const y2 = shape.y2 ?? shape.y;
-      return toBounds(Math.min(shape.x, x2), Math.min(shape.y, y2), Math.max(shape.x, x2), Math.max(shape.y, y2));
+      return toBounds(
+        Math.min(shape.x, x2),
+        Math.min(shape.y, y2),
+        Math.max(shape.x, x2),
+        Math.max(shape.y, y2),
+      );
     }
-    case "polygon":
-      return getPointBounds(getPolygonPoints(shape), { x: shape.x, y: shape.y });
+    case "polygon": {
+      const rawPts = getPolygonPoints(shape);
+      if (rawPts.length === 0) {
+        return toBounds(shape.x, shape.y, shape.x, shape.y);
+      }
+      const anchor = shape.anchor || "top-left";
+      if (anchor === "top-left") {
+        return getPointBounds(rawPts, { x: shape.x, y: shape.y });
+      }
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+      for (const p of rawPts) {
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+      }
+      const w = maxX - minX;
+      const h = maxY - minY;
+      if (anchor === "center") {
+        return toBounds(
+          shape.x - w / 2,
+          shape.y - h / 2,
+          shape.x + w / 2,
+          shape.y + h / 2,
+        );
+      }
+      // bottom-right
+      return toBounds(shape.x - w, shape.y - h, shape.x, shape.y);
+    }
     case "path":
-      return getPointBounds(getSegmentPoints(shape.segments), { x: shape.x, y: shape.y });
+      return getPointBounds(getSegmentPoints(shape.segments), {
+        x: shape.x,
+        y: shape.y,
+      });
     default:
       return toBounds(shape.x, shape.y, shape.x, shape.y);
   }
@@ -132,7 +218,9 @@ export function translateShape(shape: Shape, dx: number, dy: number): Shape {
   if (shape.x2 != null) translated.x2 = shape.x2 + dx;
   if (shape.y2 != null) translated.y2 = shape.y2 + dy;
   if (shape.points) {
-    translated.points = shape.points.map((value, index) => value + (index % 2 === 0 ? dx : dy));
+    translated.points = shape.points.map(
+      (value, index) => value + (index % 2 === 0 ? dx : dy),
+    );
   }
   if (shape.segments) {
     translated.segments = shape.segments.map((segment) => {
@@ -156,21 +244,32 @@ export function clampShapeIntoCanvas(shape: Shape, padding = 0): Shape {
   let dy = 0;
 
   if (bounds.minX < padding) dx = padding - bounds.minX;
-  if (bounds.maxX > CANVAS_WIDTH - padding) dx = (CANVAS_WIDTH - padding) - bounds.maxX;
+  if (bounds.maxX > CANVAS_WIDTH - padding)
+    dx = CANVAS_WIDTH - padding - bounds.maxX;
   if (bounds.minY < padding) dy = padding - bounds.minY;
-  if (bounds.maxY > CANVAS_HEIGHT - padding) dy = (CANVAS_HEIGHT - padding) - bounds.maxY;
+  if (bounds.maxY > CANVAS_HEIGHT - padding)
+    dy = CANVAS_HEIGHT - padding - bounds.maxY;
 
   if (dx === 0 && dy === 0) return shape;
   return translateShape(shape, dx, dy);
 }
 
 export function overlapRatio(a: Bounds, b: Bounds): number {
-  const overlapWidth = Math.max(0, Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX));
-  const overlapHeight = Math.max(0, Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY));
+  const overlapWidth = Math.max(
+    0,
+    Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX),
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY),
+  );
 
   if (overlapWidth === 0 || overlapHeight === 0) return 0;
 
   const overlapArea = overlapWidth * overlapHeight;
-  const smallerArea = Math.max(1, Math.min(a.width * a.height, b.width * b.height));
+  const smallerArea = Math.max(
+    1,
+    Math.min(a.width * a.height, b.width * b.height),
+  );
   return overlapArea / smallerArea;
 }

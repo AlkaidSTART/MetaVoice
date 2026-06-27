@@ -4,15 +4,33 @@ import { drawInstructionSchema } from "../../lib/draw-schema";
 import { expandIllustrationComponents } from "../../lib/layout/illustration-expander";
 import { normalizeInstructionLayout } from "../../lib/layout/position-normalizer";
 import type { DrawInstruction, Segment, Shape } from "../../lib/draw-schema";
-import { buildContextSection, getPromptBuilders, type DrawContext } from "./prompts";
+import {
+  buildContextSection,
+  getPromptBuilders,
+  type DrawContext,
+} from "./prompts";
 
 const SIMPLE_PROMPT_LENGTH_THRESHOLD = 24;
-const SIMPLE_SHAPE_KEYWORDS = ["圆", "圆形", "矩形", "方形", "三角形", "直线", "星星", "五角星", "写上"];
-const CANVAS_CENTER = { x: 480, y: 360 };
+const SIMPLE_SHAPE_KEYWORDS = [
+  "圆",
+  "圆形",
+  "矩形",
+  "方形",
+  "三角形",
+  "直线",
+  "星星",
+  "五角星",
+  "写上",
+];
+const CANVAS_CENTER = { x: 240, y: 180 };
 
 function normalizeDrawError(error: unknown): Error {
   const message =
-    error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown draw error";
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Unknown draw error";
 
   if (/Missing OPENAI_API_KEY/i.test(message)) {
     return new Error("绘图模型未配置 OPENAI_API_KEY");
@@ -40,10 +58,6 @@ async function generateModelText(
   return result.text.trim();
 }
 
-/**
- * 安全 JSON 解析：LLM 输出经常带 ```json 代码块或前后多余文本，
- * 这里做容错剥离。失败则抛错由上层捕获。
- */
 function parseJsonSafe(raw: string): unknown {
   const cleaned = raw
     .trim()
@@ -51,7 +65,6 @@ function parseJsonSafe(raw: string): unknown {
     .replace(/\s*```$/i, "")
     .trim();
 
-  // 容错：截取第一个 { 到最后一个 } 之间的内容
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
   const candidate =
@@ -62,10 +75,14 @@ function parseJsonSafe(raw: string): unknown {
   return JSON.parse(candidate);
 }
 
-function averagePoint(points: Array<{ x: number; y: number }>): { x: number; y: number } | null {
+function averagePoint(
+  points: Array<{ x: number; y: number }>,
+): { x: number; y: number } | null {
   if (points.length === 0) return null;
 
-  const valid = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  const valid = points.filter(
+    (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+  );
   if (valid.length === 0) return null;
 
   const sum = valid.reduce(
@@ -79,7 +96,9 @@ function averagePoint(points: Array<{ x: number; y: number }>): { x: number; y: 
   };
 }
 
-function inferPointFromSegments(segments: Segment[] | undefined): { x: number; y: number } | null {
+function inferPointFromSegments(
+  segments: Segment[] | undefined,
+): { x: number; y: number } | null {
   if (!segments?.length) return null;
 
   const points: Array<{ x: number; y: number }> = [];
@@ -98,7 +117,9 @@ function inferPointFromSegments(segments: Segment[] | undefined): { x: number; y
   return averagePoint(points);
 }
 
-function inferPointFromPolygon(points: number[] | undefined): { x: number; y: number } | null {
+function inferPointFromPolygon(
+  points: number[] | undefined,
+): { x: number; y: number } | null {
   if (!points?.length || points.length < 2) return null;
 
   const pairs: Array<{ x: number; y: number }> = [];
@@ -109,7 +130,9 @@ function inferPointFromPolygon(points: number[] | undefined): { x: number; y: nu
   return averagePoint(pairs);
 }
 
-function inferShapeAnchor(shape: Partial<Shape>): { x: number; y: number } | null {
+function inferShapeAnchor(
+  shape: Partial<Shape>,
+): { x: number; y: number } | null {
   switch (shape.type) {
     case "polygon":
       return inferPointFromPolygon(shape.points);
@@ -150,7 +173,9 @@ export function normalizeInstructionPayload(payload: unknown): unknown {
   return {
     ...record,
     shapes: record.shapes.map((shape) =>
-      shape && typeof shape === "object" ? normalizeShape(shape as Partial<Shape>) : shape,
+      shape && typeof shape === "object"
+        ? normalizeShape(shape as Partial<Shape>)
+        : shape,
     ),
   };
 }
@@ -199,52 +224,83 @@ function isSimpleTask(prompt: string, context?: DrawContext): boolean {
   return SIMPLE_SHAPE_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
-async function generateDrawInstruction(userPrompt: string, ctx?: DrawContext): Promise<DrawInstruction> {
-  const { buildPolishPrompt, buildDrawPrompt } = getPromptBuilders();
+async function generateDrawInstruction(
+  userPrompt: string,
+  ctx?: DrawContext,
+): Promise<DrawInstruction> {
+  const { buildPolishPrompt, buildDrawPrompt, buildValidatePrompt } =
+    getPromptBuilders();
   const appendMode = Boolean(ctx?.shapes.length);
   const useSimpleFlow = isSimpleTask(userPrompt, ctx);
-  const polishModelName = "deepseek-v4-flash";
-  const drawModelName = useSimpleFlow ? "deepseek-v4-flash" : "deepseek-v4-pro";
-  const polishModel = appendMode || !useSimpleFlow ? getModelByName(polishModelName) : null;
+  const drawModelName = "deepseek-v4-pro";
   const drawModel = getModelByName(drawModelName);
 
   const contextSection = buildContextSection(ctx);
   const startedAt = Date.now();
 
   let effectivePrompt = userPrompt;
-  if (polishModel) {
+  if (!useSimpleFlow && !appendMode) {
+    const polishModel = getModelByName("deepseek-v4-flash");
     const polishStartedAt = Date.now();
     effectivePrompt = await generateModelText(
       polishModel,
       buildPolishPrompt(userPrompt, appendMode),
       0.1,
     );
-    console.log(`[draw] stage=polish model=${polishModelName} elapsedMs=${Date.now() - polishStartedAt}`);
+    console.log(
+      `[draw] stage=polish model=deepseek-v4-flash elapsedMs=${Date.now() - polishStartedAt}`,
+    );
   }
 
   const drawStartedAt = Date.now();
   const rawJson = await generateModelText(
     drawModel,
     buildDrawPrompt(effectivePrompt, contextSection),
-    0.2,
+    0.05,
   );
-  console.log(`[draw] stage=draw model=${drawModelName} elapsedMs=${Date.now() - drawStartedAt}`);
+  console.log(
+    `[draw] stage=draw model=${drawModelName} elapsedMs=${Date.now() - drawStartedAt}`,
+  );
 
   const parsed = parseJsonSafe(rawJson);
   const normalized = normalizeInstructionPayload(parsed);
   const instruction = drawInstructionSchema.parse(normalized);
+
   const layoutNormalized = normalizeInstructionLayout(instruction, ctx);
   const illustrationExpanded = expandIllustrationComponents(layoutNormalized);
-  const postExpandedNormalized = normalizeInstructionLayout(illustrationExpanded, ctx);
-  console.log(`[draw] pipeline=online-critical elapsedMs=${Date.now() - startedAt} appendMode=${appendMode} simple=${useSimpleFlow} layout=normalized`);
-  return postExpandedNormalized;
+  const postExpandedNormalized = normalizeInstructionLayout(
+    illustrationExpanded,
+    ctx,
+  );
+
+  const validateModel = getModelByName("deepseek-v4-flash");
+  const validateStartedAt = Date.now();
+  const validatedRawJson = await generateModelText(
+    validateModel,
+    buildValidatePrompt(JSON.stringify(postExpandedNormalized), contextSection),
+    0.0,
+  );
+  console.log(
+    `[draw] stage=validate model=deepseek-v4-flash elapsedMs=${Date.now() - validateStartedAt}`,
+  );
+
+  const validatedParsed = parseJsonSafe(validatedRawJson);
+  const validatedNormalized = normalizeInstructionPayload(validatedParsed);
+  const validatedInstruction = drawInstructionSchema.parse(validatedNormalized);
+  const finalLayout = normalizeInstructionLayout(validatedInstruction, ctx);
+
+  console.log(
+    `[draw] pipeline=polish→draw→validate elapsedMs=${Date.now() - startedAt} appendMode=${appendMode} simple=${useSimpleFlow}`,
+  );
+  return finalLayout;
 }
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as DrawRequest;
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
-    const appendPrompt = typeof body.appendPrompt === "string" ? body.appendPrompt : "";
+    const appendPrompt =
+      typeof body.appendPrompt === "string" ? body.appendPrompt : "";
     const effectivePrompt = appendPrompt.trim() || prompt.trim();
     const context =
       body.context && Array.isArray(body.context.shapes)
@@ -262,7 +318,10 @@ export async function POST(req: Request) {
       getModel();
     } catch {
       console.error("Missing OPENAI_API_KEY");
-      return Response.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
+      return Response.json(
+        { error: "Missing OPENAI_API_KEY" },
+        { status: 500 },
+      );
     }
 
     const instruction = await generateDrawInstruction(effectivePrompt, context);
@@ -270,7 +329,7 @@ export async function POST(req: Request) {
     return Response.json(instruction);
   } catch (error) {
     const normalizedError = normalizeDrawError(error);
-    console.error("Error in draw API:", error);
+    console.error("Error in draw error:", error);
     return Response.json({ error: normalizedError.message }, { status: 500 });
   }
 }

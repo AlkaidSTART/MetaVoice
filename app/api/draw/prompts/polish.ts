@@ -1,4 +1,7 @@
-export function buildPolishPrompt(userPrompt: string, hasContext: boolean): string {
+export function buildPolishPrompt(
+  userPrompt: string,
+  hasContext: boolean,
+): string {
   return `你是绘图需求润色 agent。你的任务是保留用户原始意图，把口语、歧义、碎片化描述整理成更适合后续绘图 agent 消化的简洁中文描述。
 
 要求：
@@ -9,6 +12,8 @@ export function buildPolishPrompt(userPrompt: string, hasContext: boolean): stri
 - 如果用户表达里有恐怖、阴森、怪异、血腥、畸形、攻击性或不适合儿童的元素，转成安全童趣版本，不要照搬危险氛围。
 - 不要把普通动物、人物或自然物润色成怪物、拟人畸形、超现实拼接或令人不适的组合。
 - 保持物体关系符合常识，例如太阳在天空、鱼在水里、树在地面、房子有屋顶和门窗。
+- 如果描述涉及动物或人物，在润色时补充"用贝塞尔曲线画有机轮廓，不要用几何图形硬拼"的提示。
+- 如果用户描述了动物/人物的姿态或动作，保留这些细节，不要模糊化。
 - 输出 1 段纯文本，不要 JSON，不要解释。
 - 当前任务${hasContext ? "是追加绘制" : "是首轮绘制"}。
 

@@ -11,7 +11,7 @@
  * 设计要点：
  * - 所有随机性来自确定性种子（mulberry32），同一作品渲染/导出像素一致。
  * - 所有函数对退化输入（零长曲线、空 segments）有防御，不抛错、不除零。
- * - 坐标系与渲染层一致：左上角原点，x 向右、y 向下（960×720）。
+ * - 坐标系与渲染层一致：左上角原点，x 向右、y 向下（480×360）。
  */
 
 import type { Segment, Shape, SketchStyle } from "./draw-schema";
@@ -58,7 +58,7 @@ function smoothNoise1d(rng: () => number, len: number): number[] {
   const out: number[] = [];
   for (let i = 0; i < len; i++) {
     // 在相邻两个噪声样本间线性插值，得到平滑的低频扰动
-    const f = i / Math.max(1, raw.length - 1) * (raw.length - 1);
+    const f = (i / Math.max(1, raw.length - 1)) * (raw.length - 1);
     const i0 = Math.floor(f);
     const i1 = Math.min(raw.length - 1, i0 + 1);
     const t = f - i0;
@@ -76,11 +76,25 @@ function quadraticPoint(p0: Point, p1: Point, p2: Point, t: number): Point {
   };
 }
 
-function cubicPoint(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
+function cubicPoint(
+  p0: Point,
+  p1: Point,
+  p2: Point,
+  p3: Point,
+  t: number,
+): Point {
   const u = 1 - t;
   return {
-    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
-    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y,
+    x:
+      u * u * u * p0.x +
+      3 * u * u * t * p1.x +
+      3 * u * t * t * p2.x +
+      t * t * t * p3.x,
+    y:
+      u * u * u * p0.y +
+      3 * u * u * t * p1.y +
+      3 * u * t * t * p2.y +
+      t * t * t * p3.y,
   };
 }
 
@@ -179,7 +193,10 @@ function cumulativeLengths(points: Point[]): { cum: number[]; total: number } {
   const cum: number[] = [];
   let total = 0;
   for (let i = 1; i < points.length; i++) {
-    total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    total += Math.hypot(
+      points[i].x - points[i - 1].x,
+      points[i].y - points[i - 1].y,
+    );
     cum.push(total);
   }
   return { cum, total };
@@ -239,28 +256,34 @@ export function flattenShapeOutline(
   toTopLeftFn: (s: Shape) => { x: number; y: number },
 ): { points: Point[]; closed: boolean } {
   switch (shape.type) {
-    case 'circle': {
+    case "circle": {
       const r = Math.max(1, shape.radius || 50);
+      const { x, y } = toTopLeftFn(shape);
+      const cx = x + r;
+      const cy = y + r;
       const pts: Point[] = [];
       const n = 48;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
-        pts.push({ x: shape.x + Math.cos(a) * r, y: shape.y + Math.sin(a) * r });
+        pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
       }
       return { points: pts, closed: true };
     }
-    case 'ellipse': {
+    case "ellipse": {
       const rx = Math.max(1, shape.rx || 50);
       const ry = Math.max(1, shape.ry || 30);
+      const { x, y } = toTopLeftFn(shape);
+      const cx = x + rx;
+      const cy = y + ry;
       const pts: Point[] = [];
       const n = 48;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
-        pts.push({ x: shape.x + Math.cos(a) * rx, y: shape.y + Math.sin(a) * ry });
+        pts.push({ x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry });
       }
       return { points: pts, closed: true };
     }
-    case 'rectangle': {
+    case "rectangle": {
       const w = shape.width || 100;
       const h = shape.height || 100;
       const { x, y } = toTopLeftFn(shape);
@@ -268,35 +291,51 @@ export function flattenShapeOutline(
       const sub = 3;
       const pts: Point[] = [];
       for (let i = 0; i <= sub; i++) pts.push({ x: x + (w * i) / sub, y }); // 上边
-      for (let i = 1; i <= sub; i++) pts.push({ x: x + w, y: y + (h * i) / sub }); // 右边
-      for (let i = 1; i <= sub; i++) pts.push({ x: x + w - (w * i) / sub, y: y + h }); // 下边
+      for (let i = 1; i <= sub; i++)
+        pts.push({ x: x + w, y: y + (h * i) / sub }); // 右边
+      for (let i = 1; i <= sub; i++)
+        pts.push({ x: x + w - (w * i) / sub, y: y + h }); // 下边
       for (let i = 1; i < sub; i++) pts.push({ x, y: y + h - (h * i) / sub }); // 左边
       return { points: pts, closed: true };
     }
-    case 'triangle': {
+    case "triangle": {
       const w = shape.width || 100;
       const h = shape.height || 100;
       const { x, y } = toTopLeftFn(shape);
       // 顶→右下→左下
-      return { points: [{ x: x + w / 2, y }, { x: x + w, y: y + h }, { x, y: y + h }], closed: true };
+      return {
+        points: [
+          { x: x + w / 2, y },
+          { x: x + w, y: y + h },
+          { x, y: y + h },
+        ],
+        closed: true,
+      };
     }
-    case 'polygon': {
+    case "polygon": {
       const pts: Point[] = [];
       const raw = shape.points || [];
-      for (let i = 0; i + 1 < raw.length; i += 2) pts.push({ x: raw[i], y: raw[i + 1] });
+      for (let i = 0; i + 1 < raw.length; i += 2)
+        pts.push({ x: raw[i], y: raw[i + 1] });
       return { points: pts, closed: true };
     }
-    case 'line': {
+    case "line": {
       const endX = shape.x2 ?? shape.x + 100;
       const endY = shape.y2 ?? shape.y;
-      return { points: [{ x: shape.x, y: shape.y }, { x: endX, y: endY }], closed: false };
+      return {
+        points: [
+          { x: shape.x, y: shape.y },
+          { x: endX, y: endY },
+        ],
+        closed: false,
+      };
     }
-    case 'path': {
+    case "path": {
       const segs = shape.segments || [];
       const closed = shape.closed ?? false;
       return { points: flattenPathSegments(segs, closed), closed };
     }
-    case 'text':
+    case "text":
     default:
       return { points: [], closed: false };
   }
@@ -349,7 +388,10 @@ export function getPathBounds(shape: Shape): Bounds {
  *
  * roughness=0 时原样返回（widthScale 全 1），等价关闭 sketch。
  */
-export function applySketchJitter(points: Point[], sketch: SketchStyle): SketchResult {
+export function applySketchJitter(
+  points: Point[],
+  sketch: SketchStyle,
+): SketchResult {
   const n = points.length;
   if (n === 0) return { points: [], widthScale: [] };
   if (n === 1) return { points: [{ ...points[0] }], widthScale: [1] };
@@ -359,7 +401,10 @@ export function applySketchJitter(points: Point[], sketch: SketchStyle): SketchR
   const wobble = Math.max(0, sketch.wobble ?? 0.3);
 
   if (amp === 0 && wobble === 0) {
-    return { points: points.map((p) => ({ ...p })), widthScale: points.map(() => 1) };
+    return {
+      points: points.map((p) => ({ ...p })),
+      widthScale: points.map(() => 1),
+    };
   }
 
   // 两路平滑噪声（x/y 各一路），相位错开避免方向偏置

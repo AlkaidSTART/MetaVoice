@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Canvas 绘图指令 Schema（v4 · 贝塞尔弧线 + 手绘风格）
  *
- * 坐标系：960×720，左上角为原点 (0,0)，x 向右、y 向下。
+ * 坐标系：480×360，左上角为原点 (0,0)，x 向右、y 向下。
  *
  * 视觉增强（全部 optional，向下兼容）：
  * - gradient:  渐变填充，替代纯色 fillColor。radial 模拟球体光照，linear 模拟天空/草地/水面
@@ -22,22 +22,28 @@ import { z } from "zod";
 const anchorSchema = z
   .enum(["top-left", "center", "bottom-right"])
   .default("top-left")
-  .describe("(x,y) 指代的参考点：top-left 左上角、center 几何中心、bottom-right 右下角");
+  .describe(
+    "(x,y) 指代的参考点：top-left 左上角、center 几何中心、bottom-right 右下角",
+  );
 
 const scaleSchema = z
   .enum(["small", "medium", "large", "xl"])
   .optional()
-  .describe("尺寸语义提示（small≈30-50, medium≈80-120, large≈150-220, xl≈260-360）");
+  .describe(
+    "尺寸语义提示（small≈30-50, medium≈80-120, large≈150-220, xl≈260-360）",
+  );
 
 // 渐变填充：radial 模拟球体光照（中心亮→边缘暗），linear 模拟天空/草地/水面
 const gradientSchema = z.object({
-  type: z.enum(["radial", "linear"]).describe("radial 径向（球体光照）、linear 线性（天空/草地）"),
+  type: z
+    .enum(["radial", "linear"])
+    .describe("radial 径向（球体光照）、linear 线性（天空/草地）"),
   stops: z
     .array(
       z.object({
         offset: z.number().min(0).max(1).describe("色阶位置 0-1"),
         color: z.string().describe("颜色 #RRGGBB 或 #RRGGBBAA 或 rgba()"),
-      })
+      }),
     )
     .min(2)
     .max(5)
@@ -45,7 +51,9 @@ const gradientSchema = z.object({
   angle: z
     .number()
     .optional()
-    .describe("仅 linear：渐变方向角度（度），0=向上、90=向右、180=向下，默认 180（上→下）"),
+    .describe(
+      "仅 linear：渐变方向角度（度），0=向上、90=向右、180=向下，默认 180（上→下）",
+    ),
 });
 
 // 投影阴影：模拟立体感与地面投影
@@ -64,8 +72,16 @@ const glowSchema = z.object({
 
 // 球体表面高光斑：模拟反光
 const highlightSchema = z.object({
-  x: z.number().min(-1).max(1).describe("高光中心相对形状几何中心的水平偏移，-1~1（-1 最左，1 最右）"),
-  y: z.number().min(-1).max(1).describe("垂直偏移，-1~1（-1 最上，1 最下），光源在左上则负值"),
+  x: z
+    .number()
+    .min(-1)
+    .max(1)
+    .describe("高光中心相对形状几何中心的水平偏移，-1~1（-1 最左，1 最右）"),
+  y: z
+    .number()
+    .min(-1)
+    .max(1)
+    .describe("垂直偏移，-1~1（-1 最上，1 最下），光源在左上则负值"),
   radius: z.number().min(1).describe("高光半径 px"),
   opacity: z.number().min(0).max(1).describe("不透明度 0-1，建议 0.4-0.8"),
 });
@@ -76,7 +92,9 @@ const highlightSchema = z.object({
 //   Q: x1,y1 控制点 + x,y 终点
 //   C: x1,y1 + x2,y2 控制点 + x,y 终点
 const segmentSchema = z.object({
-  cmd: z.enum(["M", "L", "Q", "C", "Z"]).describe("M 移动/L 直线/Q 二次贝塞尔/C 三次贝塞尔/Z 闭合"),
+  cmd: z
+    .enum(["M", "L", "Q", "C", "Z"])
+    .describe("M 移动/L 直线/Q 二次贝塞尔/C 三次贝塞尔/Z 闭合"),
   x: z.number().optional().describe("终点 X（M/L/Q/C 需要）"),
   y: z.number().optional().describe("终点 Y（M/L/Q/C 需要）"),
   x1: z.number().optional().describe("控制点1 X（Q/C 需要）"),
@@ -93,7 +111,9 @@ const sketchSchema = z.object({
     .min(0)
     .max(2)
     .default(0.5)
-    .describe("轮廓抖动幅度 0-2，0=无抖动，0.3-0.8 常用（童趣/卡通），>1 较夸张"),
+    .describe(
+      "轮廓抖动幅度 0-2，0=无抖动，0.3-0.8 常用（童趣/卡通），>1 较夸张",
+    ),
   seed: z
     .number()
     .int()
@@ -120,12 +140,18 @@ export const shapeSchema = z.object({
   ]),
   // 元素稳定标识：多轮创作中用于寻址（移动/改色/删除）与撤销栈定位。
   // 首次渲染时若缺失，由客户端 canvas-state 补一个短 id；不影响渲染。
-  id: z.string().optional().describe("元素稳定标识（多轮编辑寻址用），渲染无关"),
+  id: z
+    .string()
+    .optional()
+    .describe("元素稳定标识（多轮编辑寻址用），渲染无关"),
   // 语义标签：如 "太阳"/"树冠"/"小狗"。供 LLM 指代消解与后续选中 UI，
   // 渲染层忽略此字段。多轮 add 时由 LLM 输出，方便「把它移到左上角」解析。
-  label: z.string().optional().describe("语义标签（如 太阳/树冠），用于指代与选中，渲染忽略"),
-  x: z.number().describe("X 坐标 (0-960)，配合 anchor 解读"),
-  y: z.number().describe("Y 坐标 (0-720)，配合 anchor 解读"),
+  label: z
+    .string()
+    .optional()
+    .describe("语义标签（如 太阳/树冠），用于指代与选中，渲染忽略"),
+  x: z.number().describe("X 坐标 (0-480)，配合 anchor 解读"),
+  y: z.number().describe("Y 坐标 (0-360)，配合 anchor 解读"),
 
   // 尺寸/形状参数（按 type 选填）
   width: z.number().optional().describe("rectangle/triangle 的宽度"),
@@ -138,16 +164,22 @@ export const shapeSchema = z.object({
   points: z
     .array(z.number())
     .optional()
-    .describe("polygon 顶点坐标，平铺为 [x1,y1,x2,y2,...]，至少 6 个数（3 个顶点）"),
+    .describe(
+      "polygon 顶点坐标，平铺为 [x1,y1,x2,y2,...]，至少 6 个数（3 个顶点）",
+    ),
   // path 指令段（SVG 风格 M/L/Q/C/Z），用于贝塞尔曲线/自由弧线
   segments: z
     .array(segmentSchema)
     .optional()
-    .describe("path 的指令段数组（仅 type=path）。首段应为 M；可含 Q/C 贝塞尔绘制弧线；Z 闭合"),
+    .describe(
+      "path 的指令段数组（仅 type=path）。首段应为 M；可含 Q/C 贝塞尔绘制弧线；Z 闭合",
+    ),
   closed: z
     .boolean()
     .optional()
-    .describe("path 是否闭合（闭合时可填充 fillColor，自动 Z）。默认 false（开放曲线，仅描边）"),
+    .describe(
+      "path 是否闭合（闭合时可填充 fillColor，自动 Z）。默认 false（开放曲线，仅描边）",
+    ),
 
   // 文本
   text: z.string().optional().describe("text 类型的文字内容"),
@@ -158,7 +190,10 @@ export const shapeSchema = z.object({
     .describe("文字粗细，默认 normal"),
 
   // 样式（fillColor 为兜底纯色；若提供 gradient 则优先用渐变）
-  fillColor: z.string().optional().describe("填充色（#RRGGBB 或名称）。若有 gradient 则被渐变覆盖"),
+  fillColor: z
+    .string()
+    .optional()
+    .describe("填充色（#RRGGBB 或名称）。若有 gradient 则被渐变覆盖"),
   strokeColor: z.string().optional().describe("描边色（#RRGGBB 或名称）"),
   strokeWidth: z.number().optional().describe("描边宽度，默认 2"),
   opacity: z
@@ -173,7 +208,9 @@ export const shapeSchema = z.object({
     .describe("旋转角度（度），围绕几何中心顺时针旋转，默认 0"),
 
   // 视觉增强字段
-  gradient: gradientSchema.optional().describe("渐变填充：radial 球体光照 / linear 天空草地"),
+  gradient: gradientSchema
+    .optional()
+    .describe("渐变填充：radial 球体光照 / linear 天空草地"),
   shadow: shadowSchema.optional().describe("投影阴影，模拟立体感与地面投影"),
   glow: glowSchema.optional().describe("发光光晕，用于太阳/灯泡等光源体"),
   highlight: highlightSchema.optional().describe("球体表面高光斑，模拟反光"),
@@ -201,7 +238,10 @@ const vignetteSchema = z.object({
 
 export const drawInstructionSchema = z.object({
   shapes: z.array(shapeSchema),
-  backgroundColor: z.string().nullish().describe("画布背景色（#RRGGBB 或名称）"),
+  backgroundColor: z
+    .string()
+    .nullish()
+    .describe("画布背景色（#RRGGBB 或名称）"),
   vignette: vignetteSchema.optional().describe("全局边缘暗角，增加画面聚焦感"),
 });
 

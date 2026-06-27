@@ -22,23 +22,25 @@ function calculateSimilarity(s1: string, s2: string): number {
     for (let j = 1; j <= len2; j++) {
       const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
       matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,      // 删除
-        matrix[i][j - 1] + 1,      // 插入
-        matrix[i - 1][j - 1] + cost // 替换
+        matrix[i - 1][j] + 1, // 删除
+        matrix[i][j - 1] + 1, // 插入
+        matrix[i - 1][j - 1] + cost, // 替换
       );
     }
   }
 
   // 计算相似度分数 (0-1)
   const maxLen = Math.max(len1, len2);
-  return 1 - (matrix[len1][len2] / maxLen);
+  return 1 - matrix[len1][len2] / maxLen;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireApiUser();
     const prompt = request.nextUrl.searchParams.get("prompt") || "";
-    const threshold = parseFloat(request.nextUrl.searchParams.get("threshold") || "0.9");
+    const threshold = parseFloat(
+      request.nextUrl.searchParams.get("threshold") || "0.9",
+    );
 
     if (!prompt) {
       return jsonError("prompt is required", 400);
@@ -47,24 +49,24 @@ export async function GET(request: NextRequest) {
     // 获取用户相关的历史记录
     const histories = await prisma.promptHistory.findMany({
       where: {
-        OR: [
-          { userId: user.id },
-          { userId: null }
-        ]
+        OR: [{ userId: user.id }, { userId: null }],
       },
       orderBy: { createdAt: "desc" },
     });
 
     // 计算相似度并排序
     const sortedHistories = histories
-      .map(h => ({
+      .map((h) => ({
         ...h,
-        similarityScore: calculateSimilarity(prompt.trim().toLowerCase(), h.prompt.toLowerCase())
+        similarityScore: calculateSimilarity(
+          prompt.trim().toLowerCase(),
+          h.prompt.toLowerCase(),
+        ),
       }))
       .sort((a, b) => b.similarityScore - a.similarityScore);
 
     // 找到相似度高于阈值的记录
-    const matched = sortedHistories.find(h => h.similarityScore >= threshold);
+    const matched = sortedHistories.find((h) => h.similarityScore >= threshold);
 
     if (matched) {
       // 更新使用次数，并标记为可复用模板
@@ -86,6 +88,10 @@ export async function GET(request: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
 
-    return jsonError("Failed to find similar prompt", 500, String(error));
+    console.error(
+      "[api/prompts/similar] database error, returning unmatched:",
+      error,
+    );
+    return jsonOk({ history: null, matched: false });
   }
 }

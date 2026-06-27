@@ -42,13 +42,29 @@ export async function savePromptHistory(prompt: string, canvasParams: object) {
   return parseJson<{ history: PromptHistoryRecord }>(response);
 }
 
-export async function findSimilarPrompt(prompt: string, threshold: number = 0.9) {
-  const response = await fetch(`/api/prompts/similar?prompt=${encodeURIComponent(prompt)}&threshold=${threshold}`, {
-    method: "GET",
-    credentials: "include",
-  });
+export async function findSimilarPrompt(
+  prompt: string,
+  threshold: number = 0.9,
+) {
+  try {
+    const response = await fetch(
+      `/api/prompts/similar?prompt=${encodeURIComponent(prompt)}&threshold=${threshold}`,
+      {
+        method: "GET",
+        credentials: "include",
+      },
+    );
 
-  return parseJson<{ history: PromptHistoryRecord | null; matched: boolean }>(response);
+    return parseJson<{ history: PromptHistoryRecord | null; matched: boolean }>(
+      response,
+    );
+  } catch (error) {
+    console.warn(
+      "[prompts] findSimilarPrompt failed, falling back to unmatched:",
+      error,
+    );
+    return { history: null, matched: false };
+  }
 }
 
 export async function updatePromptHistory(id: string, canvasParams: object) {

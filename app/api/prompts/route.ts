@@ -6,19 +6,16 @@ import { prisma } from "@/lib/prisma/client";
 export async function GET(request: NextRequest) {
   try {
     const user = await requireApiUser();
-    const limit = parseInt(request.nextUrl.searchParams.get("limit") || "20", 10);
+    const limit = parseInt(
+      request.nextUrl.searchParams.get("limit") || "20",
+      10,
+    );
 
     const histories = await prisma.promptHistory.findMany({
       where: {
-        OR: [
-          { userId: user.id },
-          { userId: null }
-        ]
+        OR: [{ userId: user.id }, { userId: null }],
       },
-      orderBy: [
-        { usageCount: "desc" },
-        { createdAt: "desc" }
-      ],
+      orderBy: [{ usageCount: "desc" }, { createdAt: "desc" }],
       take: limit,
     });
 
@@ -28,7 +25,8 @@ export async function GET(request: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
 
-    return jsonError("Failed to fetch prompt history", 500, String(error));
+    console.error("[api/prompts] database error, returning empty:", error);
+    return jsonOk({ histories: [] });
   }
 }
 
@@ -38,7 +36,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const prompt = String(body?.prompt || "").trim();
-    const canvasParams = body?.canvasParams ? JSON.stringify(body.canvasParams) : "{}";
+    const canvasParams = body?.canvasParams
+      ? JSON.stringify(body.canvasParams)
+      : "{}";
 
     if (!prompt) {
       return jsonError("prompt is required", 400);
@@ -61,6 +61,10 @@ export async function POST(request: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
 
-    return jsonError("Failed to save prompt history", 500, String(error));
+    console.error(
+      "[api/prompts] database error on save, returning empty:",
+      error,
+    );
+    return jsonOk({ history: null });
   }
 }

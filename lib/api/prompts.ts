@@ -30,16 +30,21 @@ export async function fetchPromptHistories(limit: number = 20) {
 }
 
 export async function savePromptHistory(prompt: string, canvasParams: object) {
-  const response = await fetch("/api/prompts", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ prompt, canvasParams }),
-  });
+  try {
+    const response = await fetch("/api/prompts", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt, canvasParams }),
+    });
 
-  return parseJson<{ history: PromptHistoryRecord }>(response);
+    return parseJson<{ history: PromptHistoryRecord }>(response);
+  } catch (error) {
+    console.warn("[prompts] savePromptHistory failed, ignoring:", error);
+    return null;
+  }
 }
 
 export async function findSimilarPrompt(
@@ -68,23 +73,33 @@ export async function findSimilarPrompt(
 }
 
 export async function updatePromptHistory(id: string, canvasParams: object) {
-  const response = await fetch(`/api/prompts/${id}`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ canvasParams }),
-  });
+  try {
+    const response = await fetch(`/api/prompts/${id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ canvasParams }),
+    });
 
-  return parseJson<{ history: PromptHistoryRecord }>(response);
+    return parseJson<{ history: PromptHistoryRecord }>(response);
+  } catch (error) {
+    console.warn("[prompts] updatePromptHistory failed, ignoring:", error);
+    return null;
+  }
 }
 
 export async function deletePromptHistory(id: string) {
-  const response = await fetch(`/api/prompts/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
+  try {
+    const response = await fetch(`/api/prompts/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
 
-  return parseJson<{ success: boolean }>(response);
+    return parseJson<{ success: boolean }>(response);
+  } catch (error) {
+    console.warn("[prompts] deletePromptHistory failed, ignoring:", error);
+    return null;
+  }
 }
